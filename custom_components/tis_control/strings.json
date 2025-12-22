@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TIS Control Setup",
+        "description": "Configure your TIS Control integration",
+        "data": {
+          "port": "UDP Port (default: 4001)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to TIS system",
+      "invalid_port": "Invalid port number",
+      "unknown": "Unknown error occurred"
+    },
+    "abort": {
+      "already_configured": "TIS Control is already configured"
+    }
+  }
+}
