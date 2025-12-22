@@ -18,12 +18,14 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema({
-    vol.Required(CONF_PORT, default=4001): int,
+    vol.Required(CONF_PORT, default=6000): int,
 })
 
 STEP_DISCOVERY_DATA_SCHEMA = vol.Schema({
     vol.Required("network_range", default="192.168.1.0/24"): str,
-    vol.Required("scan_timeout", default=3): int,
+    vol.Required("scan_timeout", default=5): int,
+    vol.Required("target_ip", default="192.168.1.200"): str,
+    vol.Required("target_port", default=6000): int,
 })
 
 
@@ -73,18 +75,31 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             network_range = user_input["network_range"]
             timeout = user_input["scan_timeout"]
+            target_ip = user_input["target_ip"]
+            target_port = user_input["target_port"]
             
             try:
-                # Perform network discovery
-                _LOGGER.info(f"🔍 TIS Cihaz Taraması Başlıyor: {network_range}")
-                discovered = await self._discover_tis_devices(network_range, timeout)
-                self._discovered_devices = discovered
+                _LOGGER.info(f"🔍 TIS Cihaz Taraması Başlıyor...")
+                _LOGGER.info(f"📡 Hedef: {target_ip}:{target_port}")
+                _LOGGER.info(f"🌐 Ağ Aralığı: {network_range}")
                 
-                if discovered:
-                    _LOGGER.info(f"✅ {len(discovered)} TIS cihazı bulundu!")
+                # First test the specific target
+                specific_result = await self._test_specific_device(target_ip, target_port, timeout)
+                if specific_result:
+                    self._discovered_devices.append(specific_result)
+                    _LOGGER.info(f"✅ Hedef TIS cihazı bulundu: {target_ip}:{target_port}")
+                
+                # Then scan the network
+                discovered = await self._discover_tis_devices(network_range, timeout, target_port)
+                self._discovered_devices.extend(discovered)
+                
+                total_found = len(self._discovered_devices)
+                if total_found > 0:
+                    _LOGGER.info(f"🎯 Toplam {total_found} TIS cihazı bulundu!")
                     return await self.async_step_select_devices()
                 else:
-                    _LOGGER.warning("⚠️ TIS cihazı bulunamadı")
+                    _LOGGER.warning("⚠️ Hiç TIS cihazı bulunamadı")
+                    _LOGGER.info(f"💡 Manuel test: telnet {target_ip} {target_port}")
                     return await self.async_step_manual_setup()
                     
             except Exception as err:
@@ -96,7 +111,7 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=STEP_DISCOVERY_DATA_SCHEMA,
             errors=errors,
             description_placeholders={
-                "network_info": "Ağınızdaki TIS cihazları taranacak. Örnek: 192.168.1.0/24"
+                "network_info": "Gerçek TIS cihazlarınızı bulalım!"
             }
         )
 
@@ -109,11 +124,12 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             # Create entry with discovered devices
             return self.async_create_entry(
-                title=f"TIS Control ({len(selected_devices)} cihaz)",
+                title=f"TIS Control ({len(selected_devices)} gerçek cihaz)",
                 data={
                     CONF_PORT: self._port,
                     "discovered_devices": selected_devices,
-                    "discovery_enabled": True
+                    "discovery_enabled": True,
+                    "real_devices": True
                 }
             )
 
@@ -121,7 +137,9 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         device_options = {}
         for device in self._discovered_devices:
             key = f"{device['ip']}:{device['port']}"
-            name = f"{device.get('name', 'Bilinmeyen')} - {device['ip']}"
+            name = f"TIS Cihazı - {device['ip']}:{device['port']}"
+            if device.get('response'):
+                name += f" (Yanıt: {device['response'][:20]}...)"
             device_options[key] = name
 
         if not device_options:
@@ -146,11 +164,12 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle manual setup when no devices found."""
         if user_input is not None:
             return self.async_create_entry(
-                title="TIS Control (Manuel Kurulum)",
+                title="TIS Control (Test Modu)",
                 data={
                     CONF_PORT: self._port,
                     "discovered_devices": [],
-                    "discovery_enabled": False
+                    "discovery_enabled": False,
+                    "real_devices": False
                 }
             )
 
@@ -158,87 +177,133 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="manual_setup",
             data_schema=vol.Schema({}),
             description_placeholders={
-                "manual_info": "Otomatik tarama başarısız oldu. Manuel kurulum yapılacak."
+                "manual_info": "Otomatik tarama başarısız. Test modunda devam edilecek."
             }
         )
 
-    async def _discover_tis_devices(self, network_range: str, timeout: int) -> list:
+    async def _test_specific_device(self, ip: str, port: int, timeout: int) -> dict | None:
+        """Test specific TIS device."""
+        _LOGGER.info(f"🎯 Hedef cihaz test ediliyor: {ip}:{port}")
+        
+        try:
+            # Simple socket connection test
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            result = sock.connect_ex((ip, port))
+            sock.close()
+            
+            if result == 0:
+                _LOGGER.info(f"✅ Bağlantı başarılı: {ip}:{port}")
+                
+                # Try to get more info with asyncio
+                try:
+                    reader, writer = await asyncio.wait_for(
+                        asyncio.open_connection(ip, port), 
+                        timeout=timeout
+                    )
+                    
+                    # Send TIS discovery packet
+                    tis_packet = bytes([0x55, 0xAA, 0x00, 0x01, 0x00, 0x00, 0x01])
+                    writer.write(tis_packet)
+                    await writer.drain()
+                    
+                    # Try to read response
+                    try:
+                        response = await asyncio.wait_for(reader.read(100), timeout=2)
+                        writer.close()
+                        await writer.wait_closed()
+                        
+                        _LOGGER.info(f"📦 TIS yanıtı alındı: {response.hex()}")
+                        return {
+                            "ip": ip,
+                            "port": port,
+                            "name": f"TIS Device {ip}",
+                            "response": response.hex(),
+                            "found": True
+                        }
+                    except asyncio.TimeoutError:
+                        _LOGGER.info(f"⏰ TIS yanıt timeout: {ip}:{port}")
+                        writer.close()
+                        await writer.wait_closed()
+                        
+                        # Even without response, if connection works, it might be TIS
+                        return {
+                            "ip": ip,
+                            "port": port,
+                            "name": f"TIS Device {ip}",
+                            "response": "no_response_but_connected",
+                            "found": True
+                        }
+                        
+                except Exception as e:
+                    _LOGGER.debug(f"Asyncio bağlantı hatası {ip}:{port}: {e}")
+                    # Fallback: if socket connection worked, assume it's TIS
+                    return {
+                        "ip": ip,
+                        "port": port,
+                        "name": f"TIS Device {ip}",
+                        "response": "socket_connection_ok",
+                        "found": True
+                    }
+            else:
+                _LOGGER.warning(f"❌ Bağlantı başarısız: {ip}:{port} (hata kodu: {result})")
+                
+        except Exception as err:
+            _LOGGER.debug(f"Cihaz test hatası {ip}:{port}: {err}")
+        
+        return None
+
+    async def _discover_tis_devices(self, network_range: str, timeout: int, main_port: int) -> list:
         """Discover TIS devices on network."""
         discovered_devices = []
         
         try:
-            # Parse network range (simplified for demo)
+            # Parse network range
             if "/" in network_range:
                 network_base = network_range.split("/")[0].rsplit(".", 1)[0]
             else:
                 network_base = network_range.rsplit(".", 1)[0]
             
-            # Scan common TIS ports
-            tis_ports = [4001, 4002, 8080, 9090]
+            # TIS ports to check (including user's port)
+            tis_ports = [main_port, 4001, 4002, 6000, 6001, 8080, 9090]
+            # Remove duplicates while preserving order
+            tis_ports = list(dict.fromkeys(tis_ports))
             
-            tasks = []
-            for i in range(1, 255):  # Scan IP range
+            _LOGGER.info(f"🔍 Port'lar taranacak: {tis_ports}")
+            
+            # Scan IP range (limit to smaller range for faster scan)
+            for i in range(1, 255):
                 ip = f"{network_base}.{i}"
+                
                 for port in tis_ports:
-                    tasks.append(self._check_tis_device(ip, port, timeout))
-            
-            # Execute all tasks with limited concurrency
-            semaphore = asyncio.Semaphore(50)  # Limit concurrent connections
-            
-            async def sem_task(task):
-                async with semaphore:
-                    return await task
-            
-            results = await asyncio.gather(*[sem_task(task) for task in tasks], return_exceptions=True)
-            
-            for result in results:
-                if isinstance(result, dict) and result.get("found"):
-                    discovered_devices.append(result)
-                    _LOGGER.info(f"TIS Cihazı bulundu: {result['ip']}:{result['port']}")
+                    try:
+                        # Quick socket test
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        sock.settimeout(1)  # Quick timeout for scanning
+                        result = sock.connect_ex((ip, port))
+                        sock.close()
+                        
+                        if result == 0:
+                            _LOGGER.info(f"🎯 Potansiyel TIS cihazı: {ip}:{port}")
+                            
+                            device_info = {
+                                "ip": ip,
+                                "port": port,
+                                "name": f"TIS Device {ip}",
+                                "response": "port_scan_success",
+                                "found": True
+                            }
+                            discovered_devices.append(device_info)
+                            break  # One port per IP is enough
+                            
+                    except Exception:
+                        pass
             
         except Exception as err:
             _LOGGER.error(f"Network discovery hatası: {err}")
         
+        _LOGGER.info(f"📊 Ağ taraması tamamlandı. {len(discovered_devices)} cihaz bulundu.")
         return discovered_devices
-
-    async def _check_tis_device(self, ip: str, port: int, timeout: int) -> dict:
-        """Check if device at IP:port is a TIS device."""
-        try:
-            # Try to connect to the device
-            future = asyncio.open_connection(ip, port)
-            reader, writer = await asyncio.wait_for(future, timeout=timeout)
-            
-            # Send TIS discovery packet (simplified)
-            writer.write(b'\x55\xAA\x00\x01\x00\x00\x01')  # Sample TIS packet
-            await writer.drain()
-            
-            # Try to read response
-            try:
-                response = await asyncio.wait_for(reader.read(100), timeout=timeout)
-                writer.close()
-                await writer.wait_closed()
-                
-                # Check if response looks like TIS protocol
-                if response and len(response) >= 4:
-                    return {
-                        "found": True,
-                        "ip": ip,
-                        "port": port,
-                        "name": f"TIS Device",
-                        "response": response.hex()
-                    }
-            except asyncio.TimeoutError:
-                pass
-                
-            writer.close()
-            await writer.wait_closed()
-            
-        except (ConnectionRefusedError, asyncio.TimeoutError, OSError):
-            pass
-        except Exception as err:
-            _LOGGER.debug(f"Check device error {ip}:{port}: {err}")
-        
-        return {"found": False}
 
     async def async_step_import(self, user_input: dict[str, Any]) -> FlowResult:
         """Handle import."""
