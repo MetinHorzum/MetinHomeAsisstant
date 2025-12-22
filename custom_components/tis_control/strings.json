@@ -11,11 +11,11 @@
     },
     "error": {
       "cannot_connect": "Cannot connect to TIS system",
-      "invalid_port": "Invalid port number",
+      "invalid_port": "Invalid port number. Please enter a port between 1-65535",
       "unknown": "Unknown error occurred"
     },
     "abort": {
-      "already_configured": "TIS Control is already configured"
+      "already_configured": "TIS Control is already configured for this port"
     }
   }
 }
