@@ -2,20 +2,41 @@
   "config": {
     "step": {
       "user": {
-        "title": "TIS Control Setup",
-        "description": "Configure your TIS Control integration",
+        "title": "TIS Control Kurulumu",
+        "description": "TIS Control integration'ını yapılandırın",
         "data": {
-          "port": "UDP Port (default: 4001)"
+          "port": "UDP Port (varsayılan: 4001)"
         }
+      },
+      "discovery": {
+        "title": "TIS Cihaz Keşfi",
+        "description": "Ağınızdaki TIS cihazlarını otomatik olarak bul. {network_info}",
+        "data": {
+          "network_range": "Ağ Aralığı (örn: 192.168.1.0/24)",
+          "scan_timeout": "Tarama Zaman Aşımı (saniye)"
+        }
+      },
+      "select_devices": {
+        "title": "Cihaz Seçimi",
+        "description": "{device_count} adet TIS cihazı bulundu. Eklemek istediğiniz cihazları seçin:",
+        "data": {
+          "selected_devices": "Seçilen Cihazlar"
+        }
+      },
+      "manual_setup": {
+        "title": "Manuel Kurulum", 
+        "description": "{manual_info} Test modunda devam edilsin mi?",
+        "data": {}
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect to TIS system",
-      "invalid_port": "Invalid port number. Please enter a port between 1-65535",
-      "unknown": "Unknown error occurred"
+      "cannot_connect": "TIS sistemine bağlanılamadı",
+      "invalid_port": "Geçersiz port numarası. Lütfen 1-65535 arası bir port girin",
+      "scan_failed": "Ağ taraması başarısız oldu. Manuel kurulum yapılsın mı?",
+      "unknown": "Bilinmeyen hata oluştu"
     },
     "abort": {
-      "already_configured": "TIS Control is already configured for this port"
+      "already_configured": "Bu port için TIS Control zaten yapılandırılmış"
     }
   }
 }
