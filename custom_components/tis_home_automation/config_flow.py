@@ -50,6 +50,12 @@ try:
 except ImportError:
     HAS_TIS_PROTOCOL = False
 
+# Import mock system
+from .mock_devices import (
+    is_mock_mode_enabled,
+    MockCommunicationManager
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -65,28 +71,50 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     
     async def async_step_user(self, user_input: Optional[Dict[str, Any]] = None) -> FlowResult:
         """Handle the initial step."""
-        if not HAS_TIS_PROTOCOL:
-            return self.async_abort(reason="missing_tis_protocol")
-        
         errors: Dict[str, str] = {}
         
         if user_input is not None:
-            # Store basic info
+            # Check if mock mode should be used
+            if not HAS_TIS_PROTOCOL or is_mock_mode_enabled():
+                _LOGGER.warning("Using mock mode for config flow")
+                
+                # Create mock configuration entry directly
+                mock_config = {
+                    "setup_name": user_input.get("setup_name", "TIS Home Automation (Mock Mode)"),
+                    CONF_COMMUNICATION_TYPE: COMMUNICATION_TYPE_UDP,
+                    CONF_LOCAL_IP: "127.0.0.1",
+                    CONF_PORT: 6000,
+                    CONF_DISCOVERY_TIMEOUT: 10.0,
+                    "mock_mode": True
+                }
+                
+                return self.async_create_entry(
+                    title="TIS Home Automation (Mock Mode)",
+                    data=mock_config,
+                    description="TIS protokol entegrasyonu - Mock test modu"
+                )
+            
+            # Store basic info and continue with real config
             self.data.update(user_input)
             return await self.async_step_communication()
         
         # Show initial form
+        mock_warning = " (Mock Mode Aktif)" if (not HAS_TIS_PROTOCOL or is_mock_mode_enabled()) else ""
+        
         schema = vol.Schema({
-            vol.Required("setup_name", default="TIS Home Automation"): cv.string,
+            vol.Required("setup_name", default=f"TIS Home Automation{mock_warning}"): cv.string,
         })
+        
+        description_placeholders = {
+            "integration_name": "TIS Home Automation",
+            "mode_info": "Mock test modu kullanılacak - gerçek cihaz aranmayacak" if (not HAS_TIS_PROTOCOL or is_mock_mode_enabled()) else "Gerçek TIS cihazları aranacak"
+        }
         
         return self.async_show_form(
             step_id=STEP_USER,
             data_schema=schema,
             errors=errors,
-            description_placeholders={
-                "integration_name": "TIS Home Automation"
-            }
+            description_placeholders=description_placeholders
         )
     
     async def async_step_communication(
