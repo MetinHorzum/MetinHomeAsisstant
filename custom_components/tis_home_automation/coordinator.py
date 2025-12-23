@@ -38,6 +38,13 @@ try:
 except ImportError:
     HAS_TIS_PROTOCOL = False
 
+# Import mock system
+from .mock_devices import (
+    is_mock_mode_enabled,
+    create_mock_device_data,
+    MockCommunicationManager
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 class TISDataUpdateCoordinator(DataUpdateCoordinator):
@@ -330,24 +337,59 @@ class TISDataUpdateCoordinator(DataUpdateCoordinator):
     async def discover_new_devices(self, timeout: float = 30.0) -> Dict[str, TISDevice]:
         """Discover new TIS devices."""
         try:
-            local_ip = get_local_ip()
-            discovered = await self.communication_manager.discover_devices(
-                source_ip=local_ip,
-                timeout=timeout
-            )
+            # Check if using mock mode
+            if hasattr(self, 'mock_mode') and self.mock_mode:
+                _LOGGER.info("Using mock mode for device discovery")
+                mock_devices_data = create_mock_device_data()
+                
+                new_devices = {}
+                for device_key, device_data in mock_devices_data.items():
+                    if device_key not in self.devices:
+                        device = device_data["device"]
+                        await self.add_device(device)
+                        new_devices[device_key] = device
+                
+                _LOGGER.info(f"Mock discovery found {len(new_devices)} new devices")
+                return new_devices
             
-            # Add new devices to coordinator
-            new_devices = {}
-            for device_key, device in discovered.items():
-                if device_key not in self.devices:
-                    await self.add_device(device)
-                    new_devices[device_key] = device
-            
-            _LOGGER.info(f"Discovered {len(new_devices)} new TIS devices")
-            return new_devices
+            else:
+                # Real device discovery
+                local_ip = get_local_ip()
+                discovered = await self.communication_manager.discover_devices(
+                    source_ip=local_ip,
+                    timeout=timeout
+                )
+                
+                # Add new devices to coordinator
+                new_devices = {}
+                for device_key, device in discovered.items():
+                    if device_key not in self.devices:
+                        await self.add_device(device)
+                        new_devices[device_key] = device
+                
+                _LOGGER.info(f"Discovered {len(new_devices)} new TIS devices")
+                return new_devices
             
         except Exception as e:
             _LOGGER.error(f"Error during device discovery: {e}")
+            # Fall back to mock mode on error
+            if not hasattr(self, 'mock_mode') or not self.mock_mode:
+                _LOGGER.info("Falling back to mock mode due to discovery error")
+                try:
+                    mock_devices_data = create_mock_device_data()
+                    new_devices = {}
+                    for device_key, device_data in mock_devices_data.items():
+                        if device_key not in self.devices:
+                            device = device_data["device"]
+                            await self.add_device(device)
+                            new_devices[device_key] = device
+                    
+                    self.mock_mode = True
+                    _LOGGER.info(f"Mock fallback found {len(new_devices)} devices")
+                    return new_devices
+                except Exception as mock_error:
+                    _LOGGER.error(f"Mock fallback also failed: {mock_error}")
+            
             return {}
     
     @callback
