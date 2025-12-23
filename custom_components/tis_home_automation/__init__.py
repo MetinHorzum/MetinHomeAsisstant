@@ -40,11 +40,6 @@ try:
 except ImportError:
     HAS_TIS_PROTOCOL = False
 
-# Import mock system
-from .mock_devices import (
-    is_mock_mode_enabled,
-    MockCommunicationManager
-)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,35 +64,9 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TIS Home Automation from a config entry."""
-    
-    # Check if mock mode should be used
-    if not HAS_TIS_PROTOCOL or is_mock_mode_enabled():
-        _LOGGER.warning("Using mock mode for TIS Home Automation")
-        communication_manager = MockCommunicationManager()
-        
-        # Create mock coordinator
-        coordinator = TISDataUpdateCoordinator(
-            hass=hass,
-            communication_manager=communication_manager,
-            update_interval=timedelta(seconds=30)
-        )
-        coordinator.mock_mode = True
-        
-        # Simulate discovery in mock mode
-        await coordinator.discover_new_devices(timeout=5.0)
-        
-        # Store coordinator
-        hass.data[DOMAIN][entry.entry_id] = {
-            "coordinator": coordinator,
-            "communication_manager": communication_manager,
-            "discovered_devices": coordinator.devices
-        }
-        
-        # Forward setup to platforms
-        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-        
-        _LOGGER.info(f"TIS integration setup completed in mock mode with {len(coordinator.devices)} devices")
-        return True
+    if not HAS_TIS_PROTOCOL:
+        _LOGGER.error("TIS Protocol library not found")
+        return False
 
     # Get configuration data
     config_data = entry.data
