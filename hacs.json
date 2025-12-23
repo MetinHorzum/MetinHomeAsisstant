@@ -10,7 +10,6 @@
     ],
     "iot_class": "Local Polling",
     "homeassistant": "2023.1.0",
-    "zip_release": true,
-    "filename": "tis_home_automation.zip",
+    "zip_release": false,
     "country": ["TR"]
 }
