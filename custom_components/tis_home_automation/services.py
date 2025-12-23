@@ -28,7 +28,7 @@ from .entity import TISDeviceWrapper
 
 # Import TIS protocol library
 try:
-    from tis_protocol import get_local_ip
+    from .tis_protocol import get_local_ip
     HAS_TIS_PROTOCOL = True
 except ImportError:
     HAS_TIS_PROTOCOL = False

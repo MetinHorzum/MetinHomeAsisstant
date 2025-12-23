@@ -27,7 +27,7 @@ from .const import (
 
 # Import TIS protocol library
 try:
-    from tis_protocol import (
+    from .tis_protocol import (
         TISCommunicationManager,
         TISDevice,
         TISCommunicationError,

@@ -29,7 +29,7 @@ from .coordinator import TISDataUpdateCoordinator
 
 # Import TIS protocol library
 try:
-    from tis_protocol import (
+    from .tis_protocol import (
         TISCommunicationManager,
         create_communication_manager,
         get_local_ip,

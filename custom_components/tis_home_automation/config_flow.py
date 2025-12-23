@@ -39,7 +39,7 @@ from .const import (
 
 # Import TIS protocol library
 try:
-    from tis_protocol import (
+    from .tis_protocol import (
         create_communication_manager,
         get_local_ip,
         get_available_serial_ports,
