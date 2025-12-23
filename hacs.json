@@ -1,10 +1,16 @@
 {
-  "name": "TIS Control",
-  "content_in_root": false,
-  "filename": "tis_control",
-  "country": ["TR"],
-  "homeassistant": "2024.1.0",
-  "iot_class": "Local Polling",
-  "render_readme": true,
-  "domains": ["light", "switch", "climate", "sensor", "binary_sensor", "cover", "fan", "lock", "select", "button"]
+    "name": "TIS Home Automation",
+    "hacs": "1.6.0",
+    "domains": [
+        "binary_sensor",
+        "climate", 
+        "light",
+        "sensor",
+        "switch"
+    ],
+    "iot_class": "Local Polling",
+    "homeassistant": "2023.1.0",
+    "zip_release": true,
+    "filename": "tis_home_automation.zip",
+    "country": ["TR"]
 }

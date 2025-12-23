@@ -1,0 +1,366 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TIS Home Automation Setup",
+        "description": "Set up your TIS Home Automation integration to control TIS smart home devices.",
+        "data": {
+          "setup_name": "Integration Name"
+        }
+      },
+      "communication": {
+        "title": "Communication Type",
+        "description": "Choose how to communicate with your TIS devices.\n\n**UDP Network**: Communicate over your local network (Port 6000)\n**RS485 Serial**: Connect directly via serial port",
+        "data": {
+          "communication_type": "Communication Type"
+        },
+        "data_description": {
+          "communication_type": "UDP network communication is recommended for most setups"
+        }
+      },
+      "udp_config": {
+        "title": "UDP Network Configuration", 
+        "description": "Configure network settings for UDP communication.\n\n**Local IP**: Your Home Assistant server IP address\n**Port**: TIS protocol port (default: 6000)",
+        "data": {
+          "local_ip": "Local IP Address",
+          "port": "UDP Port"
+        },
+        "data_description": {
+          "local_ip": "IP address of this Home Assistant instance",
+          "port": "TIS protocol UDP port (usually 6000)"
+        }
+      },
+      "serial_config": {
+        "title": "RS485 Serial Configuration",
+        "description": "Configure serial port settings for RS485 communication.\n\n**Serial Port**: The RS485 adapter port\n**Baud Rate**: Communication speed (default: 9600)",
+        "data": {
+          "serial_port": "Serial Port",
+          "baudrate": "Baud Rate"
+        },
+        "data_description": {
+          "serial_port": "RS485 serial port device",
+          "baudrate": "Serial communication speed"
+        }
+      },
+      "discovery": {
+        "title": "Device Discovery",
+        "description": "Discover TIS devices on your network or RS485 bus.\n\n**Discovery Timeout**: How long to wait for device responses\n\nCommunication: **{communication_type}**\nConnection: **{communication_details}**",
+        "data": {
+          "discovery_timeout": "Discovery Timeout (seconds)"
+        },
+        "data_description": {
+          "discovery_timeout": "Time to wait for device discovery responses"
+        }
+      }
+    },
+    "error": {
+      "missing_tis_protocol": "TIS Protocol library is not installed. Please install the required dependencies.",
+      "connection_failed": "Failed to establish connection with the specified settings.",
+      "udp_connection_failed": "Could not bind to the specified UDP port. Check if the port is available.",
+      "serial_connection_failed": "Could not open the specified serial port. Check if the port exists and is not in use.",
+      "discovery_failed": "Device discovery failed. Check your network connection and device availability.",
+      "no_serial_ports": "No serial ports found on this system.",
+      "invalid_communication_type": "Invalid communication type selected.",
+      "unknown_error": "An unexpected error occurred during setup."
+    },
+    "abort": {
+      "missing_tis_protocol": "TIS Protocol library is required but not installed.",
+      "no_devices_found": "No TIS devices were discovered during setup.",
+      "already_configured": "This integration is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "TIS Home Automation Options",
+        "description": "Configure advanced options for your TIS integration.\n\nCommunication Type: **{communication_type}**\nCurrent Configuration: {current_config}",
+        "data": {
+          "local_ip": "Local IP Address",
+          "port": "UDP Port",
+          "serial_port": "Serial Port",
+          "baudrate": "Baud Rate",
+          "discovery_timeout": "Discovery Timeout (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "temperature": {
+        "name": "Temperature"
+      },
+      "humidity": {
+        "name": "Humidity"
+      },
+      "illuminance": {
+        "name": "Light Level"
+      },
+      "noise": {
+        "name": "Noise Level"
+      },
+      "eco2": {
+        "name": "eCO2"
+      },
+      "tvoc": {
+        "name": "TVOC"
+      },
+      "air_quality": {
+        "name": "Air Quality"
+      },
+      "battery": {
+        "name": "Battery"
+      },
+      "signal_strength": {
+        "name": "Signal Strength"
+      }
+    },
+    "binary_sensor": {
+      "motion": {
+        "name": "Motion"
+      },
+      "contact": {
+        "name": "Contact"
+      },
+      "smoke": {
+        "name": "Smoke"
+      },
+      "gas": {
+        "name": "Gas"
+      },
+      "security": {
+        "name": "Security"
+      },
+      "connection": {
+        "name": "Connection"
+      },
+      "battery_low": {
+        "name": "Battery Low"
+      }
+    },
+    "switch": {
+      "switch": {
+        "name": "Switch"
+      },
+      "gang": {
+        "name": "Gang {gang_number}"
+      },
+      "scene": {
+        "name": "Scene {scene_number}"
+      },
+      "curtain": {
+        "name": "Curtain"
+      }
+    },
+    "light": {
+      "light": {
+        "name": "Light"
+      },
+      "dimmer": {
+        "name": "Dimmer {gang_number}"
+      }
+    },
+    "climate": {
+      "ac": {
+        "name": "Air Conditioner"
+      },
+      "thermostat": {
+        "name": "Thermostat"
+      },
+      "floor_heating": {
+        "name": "Floor Heating"
+      }
+    }
+  },
+  "services": {
+    "discover_devices": {
+      "name": "Discover Devices",
+      "description": "Discover new TIS devices on the network or RS485 bus.",
+      "fields": {
+        "source_ip": {
+          "name": "Source IP",
+          "description": "IP address to use for discovery broadcast"
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Discovery timeout in seconds (5-120)"
+        }
+      }
+    },
+    "send_raw_command": {
+      "name": "Send Raw Command",
+      "description": "Send a raw TIS protocol command to a device.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "Target device ID (hex string or byte list)"
+        },
+        "op_code": {
+          "name": "Operation Code",
+          "description": "TIS operation code (hex string or byte list)"
+        },
+        "source_ip": {
+          "name": "Source IP",
+          "description": "Source IP address for the command"
+        },
+        "additional_data": {
+          "name": "Additional Data",
+          "description": "Additional data bytes for the command"
+        }
+      }
+    },
+    "refresh_device": {
+      "name": "Refresh Device",
+      "description": "Refresh a TIS device state by requesting updated information.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "TIS device ID to refresh"
+        },
+        "entity_id": {
+          "name": "Entity ID",
+          "description": "Entity ID to refresh (alternative to device_id)"
+        }
+      }
+    },
+    "reset_device": {
+      "name": "Reset Device",
+      "description": "Reset a TIS device to restore normal operation.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "TIS device ID to reset"
+        },
+        "reset_type": {
+          "name": "Reset Type",
+          "description": "Type of reset to perform"
+        }
+      }
+    },
+    "set_device_name": {
+      "name": "Set Device Name",
+      "description": "Change the display name of a TIS device.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "TIS device ID"
+        },
+        "name": {
+          "name": "New Name",
+          "description": "New display name for the device"
+        }
+      }
+    },
+    "device_diagnostics": {
+      "name": "Device Diagnostics",
+      "description": "Generate diagnostic information for TIS devices.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "Specific device ID (leave empty for all devices)"
+        },
+        "entity_id": {
+          "name": "Entity ID",
+          "description": "Entity ID to diagnose (alternative to device_id)"
+        },
+        "include_raw_data": {
+          "name": "Include Raw Data",
+          "description": "Include raw protocol data in diagnostics"
+        }
+      }
+    },
+    "scene_control": {
+      "name": "Scene Control",
+      "description": "Control TIS scene switches and scene management.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "TIS scene controller device ID"
+        },
+        "scene_id": {
+          "name": "Scene ID",
+          "description": "Scene number (1-16)"
+        },
+        "action": {
+          "name": "Action",
+          "description": "Scene action to perform"
+        }
+      }
+    },
+    "ac_control": {
+      "name": "AC Control",
+      "description": "Advanced control for TIS air conditioning units.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID", 
+          "description": "TIS AC controller device ID"
+        },
+        "power": {
+          "name": "Power",
+          "description": "Turn AC on or off"
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "AC operating mode"
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "Target temperature (16-30°C)"
+        },
+        "fan_speed": {
+          "name": "Fan Speed",
+          "description": "Fan speed setting"
+        }
+      }
+    },
+    "lighting_control": {
+      "name": "Lighting Control",
+      "description": "Advanced control for TIS lighting devices.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "TIS lighting device ID"
+        },
+        "power": {
+          "name": "Power",
+          "description": "Turn light on or off"
+        },
+        "brightness": {
+          "name": "Brightness",
+          "description": "Light brightness level (0-100%)"
+        },
+        "gang_index": {
+          "name": "Gang Index",
+          "description": "Gang number for multi-gang devices (0-3)"
+        }
+      }
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "device_discovered": "Device discovered",
+      "device_lost": "Device lost connection", 
+      "motion_detected": "Motion detected",
+      "door_opened": "Door/window opened",
+      "door_closed": "Door/window closed",
+      "smoke_detected": "Smoke detected",
+      "gas_detected": "Gas detected",
+      "scene_activated": "Scene activated",
+      "button_pressed": "Button pressed"
+    },
+    "condition_type": {
+      "device_online": "Device is online",
+      "device_offline": "Device is offline",
+      "motion_active": "Motion is detected",
+      "door_open": "Door/window is open",
+      "door_closed": "Door/window is closed"
+    },
+    "action_type": {
+      "turn_on": "Turn on",
+      "turn_off": "Turn off",
+      "toggle": "Toggle",
+      "set_brightness": "Set brightness",
+      "set_temperature": "Set temperature",
+      "activate_scene": "Activate scene"
+    }
+  }
+}

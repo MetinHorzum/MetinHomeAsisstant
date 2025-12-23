@@ -1,146 +1,313 @@
-# TIS Control - Home Assistant Integration
+# TIS Home Automation - Home Assistant Integration
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
+TIS akıllı ev cihazları için kapsamlı Home Assistant entegrasyonu. Bu entegrasyon, TIS protokolünü kullanarak 150+ farklı cihaz tipini destekler ve hem UDP hem de RS485 haberleşme seçenekleri sunar.
 
-Türk akıllı ev protokolü TIS (Total Integration System) için geliştirilmiş Home Assistant custom integration'ı.
+## 🎯 Özellikler
 
-## ✨ Özellikler
+### 📡 İletişim Desteği
+- **UDP Network (Port 6000)**: Ağ üzerinden haberleşme
+- **RS485 Serial**: Seri port üzerinden doğrudan bağlantı
+- **Otomatik Cihaz Keşfi**: SMARTCLOUD protokolü ile cihaz tespiti
+- **Çift Transport**: Aynı anda hem UDP hem RS485 desteği
 
-### Desteklenen Cihaz Tipleri
-- **💡 Işıklandırma**: Dimmer, RGB, RGBW LED şeritleri
-- **🔌 Anahtarlar**: Röle kontrollü anahtarlar
-- **🌡️ İklim Kontrol**: Klima ve yer ısıtması sistemleri
-- **📊 Sensörler**: Analog, dijital, sıcaklık, enerji sensörleri
-- **🏥 Sağlık Sensörleri**: Hava kalitesi, CO2, TVOC, gürültü
-- **🪟 Perdeler**: Motor kontrollü perde sistemleri
-- **🚨 Güvenlik**: Motion detektör ve güvenlik sensörleri
+### 🏠 Desteklenen Cihazlar
+- **Anahtar**: 1-4 gang anahtarlar, sahne kontrolleri
+- **Dimmer**: 1-2 gang dimmerlar, RGB/tunable white
+- **Klima**: AC kontrolleri, termostatlar, yerden ısıtma
+- **Sensörler**: Sıcaklık, nem, hareket, kapı/pencere, duman, gaz
+- **Sağlık Sensörleri**: Işık, gürültü, eCO2, TVOC, hava kalitesi
+- **Güvenlik**: Alarm sistemleri, kameralar
+- **Ses/Görüntü**: TV, ses sistemi kontrolleri
 
-### Teknik Özellikler
-- UDP protokolü üzerinden iletişim
-- Gerçek zamanlı durum güncellemeleri
-- Otomatik cihaz keşfi
-- HACS desteği
-- Türkçe kullanıcı arayüzü
+### 🛠 Gelişmiş Özellikler
+- **Asenkron İletişim**: Non-blocking haberleşme
+- **CRC Doğrulama**: Paket bütünlüğü kontrolü
+- **Cihaz Sağlığı**: Online/offline takibi
+- **Özel Servisler**: Ham komut gönderme, cihaz sıfırlama
+- **Çoklu Dil**: Türkçe ve İngilizce destekli
+- **HACS Entegrasyonu**: Kolay kurulum ve güncelleme
 
 ## 🚀 Kurulum
 
-### HACS ile Kurulum (Önerilen)
+### Yöntem 1: HACS (Önerilen)
 
-1. Home Assistant'ta HACS'i açın
+1. HACS'i açın
 2. **Integrations** sekmesine gidin
-3. Sağ üst köşedeki **⋮** menüsüne tıklayın
-4. **Custom repositories** seçeneğini seçin
-5. Bu repository'nin GitHub URL'ini ekleyin
-6. Category olarak **Integration** seçin
-7. **ADD** butonuna tıklayın
-8. **TIS Control** integration'ını bulun ve kurun
-9. Home Assistant'ı yeniden başlatın
+3. Sağ üst köşeden **⋮** menüsüne tıklayın
+4. **Custom repositories** seçin
+5. Repository URL'ini ekleyin: `https://github.com/your-username/tis-home-automation`
+6. Category: **Integration**
+7. **TIS Home Automation** entegrasyonunu bulup yükleyin
+8. Home Assistant'ı yeniden başlatın
 
-### Manuel Kurulum
+### Yöntem 2: Manuel Kurulum
 
 1. Bu repository'yi indirin
-2. `custom_components` klasörünü Home Assistant config dizininize kopyalayın
-3. Home Assistant'ı yeniden başlatın
+2. `custom_components/tis_home_automation` klasörünü Home Assistant'ın `custom_components` dizinine kopyalayın
+3. `tis_protocol` klasörünü de aynı dizine kopyalayın
+4. Gerekli bağımlılıkları yükleyin:
+   ```bash
+   pip install pyserial
+   ```
+5. Home Assistant'ı yeniden başlatın
 
-## ⚙️ Konfigürasyon
+## ⚙️ Yapılandırma
 
-1. Home Assistant'ta **Settings** > **Devices & Services** bölümüne gidin
-2. **ADD INTEGRATION** butonuna tıklayın
-3. **TIS Control** integration'ını arayın ve seçin
-4. UDP port numarasını girin (varsayılan: 4001)
-5. **SUBMIT** butonuna tıklayın
+### 1. Entegrasyon Ekleme
 
-## 🔧 Desteklenen Cihazlar
+1. **Ayarlar** > **Cihazlar ve Servisler**'e gidin
+2. **Entegrasyon Ekle**'ye tıklayın
+3. **TIS Home Automation**'ı arayın ve seçin
 
-| Cihaz Kodu | Cihaz Adı | Açıklama |
-|------------|-----------|----------|
-| `0x1B, 0xBA` | RCU-8OUT-8IN | 8 Çıkış 8 Giriş Kontrol Ünitesi |
-| `0x0B, 0xE9` | SEC-SM | Güvenlik Modülü |
-| `0x80, 0x58` | IP-COM-PORT | IP İletişim Portu |
-| `0x01, 0xA8` | RLY-4CH-10 | 4 Kanal 10A Röle |
-| `0x23, 0x32` | LUNA-TFT-43 | Dokunmatik Ekran Panel |
-| `0x02, 0x5A` | DIM-2CH-6A | 2 Kanal 6A Dimmer |
-| `0x02, 0x58` | DIM-6CH-2A | 6 Kanal 2A Dimmer |
+### 2. İletişim Türü Seçimi
 
-## 🏠 Örnek Kullanım
+**UDP Ağ İletişimi:**
+- Yerel IP adresi: Home Assistant sunucunuzun IP'si
+- Port: 6000 (varsayılan)
+- Çoğu kurulum için önerilen seçenek
+
+**RS485 Seri İletişim:**
+- Seri port: RS485 adaptörünüzün portu (örn. `/dev/ttyUSB0`)
+- Baud hızı: 9600 (varsayılan)
+- Doğrudan kablo bağlantısı gerektirir
+
+### 3. Cihaz Keşfi
+
+- Keşif süresini ayarlayın (5-120 saniye)
+- Entegrasyon otomatik olarak TIS cihazlarını bulacak
+- Bulunan cihazlar otomatik olarak uygun platform'lara eklenecek
+
+## 📱 Kullanım
+
+### Temel Entity'ler
+
+**Anahtar (Switch):**
+```yaml
+# Tek gang anahtar
+switch.tis_switch_01fe
+
+# Çoklu gang anahtar  
+switch.tis_switch_gang_1_02fe
+switch.tis_switch_gang_2_02fe
+```
+
+**Dimmer (Light):**
+```yaml
+# Dimmer kontrolü
+light.tis_dimmer_03fe
+# Brightness: 0-255
+# Renk desteği (RGB modeller için)
+```
+
+**Klima (Climate):**
+```yaml
+# AC kontroller
+climate.tis_ac_04fe
+# Modes: cool, heat, fan_only, auto, off
+# Temperature: 16-30°C
+# Fan speeds: auto, low, medium, high
+```
+
+**Sensör (Sensor):**
+```yaml
+# Sıcaklık sensörü
+sensor.tis_temperature_05fe
+
+# Sağlık sensörü (6 ayrı sensör)
+sensor.tis_health_sensor_lux_06fe
+sensor.tis_health_sensor_noise_06fe  
+sensor.tis_health_sensor_eco2_06fe
+sensor.tis_health_sensor_tvoc_06fe
+sensor.tis_health_sensor_temperature_06fe
+sensor.tis_health_sensor_humidity_06fe
+```
+
+### Özel Servisler
+
+**Cihaz Keşfi:**
+```yaml
+service: tis_home_automation.discover_devices
+data:
+  source_ip: "192.168.1.100"  # isteğe bağlı
+  timeout: 30  # saniye
+```
+
+**Ham Komut Gönderme:**
+```yaml
+service: tis_home_automation.send_raw_command  
+data:
+  device_id: "01FE"  # hex string veya [1, 254]
+  op_code: "1101"    # hex string veya [17, 1]  
+  additional_data: [50]  # isteğe bağlı
+```
+
+**Klima Kontrolü:**
+```yaml
+service: tis_home_automation.ac_control
+data:
+  device_id: "04FE"
+  power: "on"
+  mode: "cool" 
+  temperature: 22
+  fan_speed: "medium"
+```
+
+**Aydınlatma Kontrolü:**
+```yaml
+service: tis_home_automation.lighting_control
+data:
+  device_id: "03FE"
+  power: "on"
+  brightness: 75  # 0-100%
+  gang_index: 0   # çoklu gang için
+```
+
+## 🔧 Gelişmiş Yapılandırma
+
+### Services.yaml Örnekleri
 
 ```yaml
-# automation.yaml
-- alias: "Akşam Aydınlatması"
-  trigger:
-    - platform: sun
-      event: sunset
-  action:
-    - service: light.turn_on
-      target:
-        entity_id: light.salon_dimmer
+# Sabah rutini
+morning_routine:
+  sequence:
+    - service: tis_home_automation.lighting_control
       data:
-        brightness_pct: 80
+        device_id: "01FE"
+        power: "on" 
+        brightness: 80
+    - service: tis_home_automation.ac_control
+      data:
+        device_id: "04FE"
+        power: "on"
+        mode: "cool"
+        temperature: 24
 
-- alias: "Klima Otomasyonu"
-  trigger:
-    - platform: numeric_state
-      entity_id: sensor.salon_sicaklik
-      above: 25
-  action:
-    - service: climate.set_hvac_mode
-      target:
-        entity_id: climate.salon_klima
+# Gece modu
+night_mode:
+  sequence:
+    - service: tis_home_automation.lighting_control
       data:
-        hvac_mode: cool
+        device_id: "01FE"
+        brightness: 10
+    - service: tis_home_automation.ac_control
+      data:
+        device_id: "04FE"
+        mode: "auto"
+        temperature: 26
+```
+
+### Otomasyonlar
+
+```yaml
+# Hareket algılandığında ışığı aç
+automation:
+  - alias: "TIS Motion Light"
+    trigger:
+      platform: state
+      entity_id: binary_sensor.tis_motion_07fe
+      to: "on"
+    action:
+      service: switch.turn_on
+      entity_id: switch.tis_switch_01fe
+
+# Sıcaklık çok yüksek olduğunda klimayı aç  
+  - alias: "TIS Auto AC"
+    trigger:
+      platform: numeric_state
+      entity_id: sensor.tis_temperature_05fe
+      above: 28
+    action:
+      service: tis_home_automation.ac_control
+      data:
+        device_id: "04FE"
+        power: "on"
+        mode: "cool"
+        temperature: 24
 ```
 
 ## 🐛 Sorun Giderme
 
 ### Yaygın Sorunlar
 
-**1. Cihazlar görünmüyor**
-- UDP port numarasının doğru olduğunu kontrol edin
-- Network bağlantısını kontrol edin
-- Home Assistant loglarını inceleyin
+**Cihazlar bulunamıyor:**
+- IP adresi ve port ayarlarını kontrol edin
+- Ağ bağlantısını doğrulayın
+- Güvenlik duvarı ayarlarını kontrol edin
+- TIS cihazlarının aynı ağda olduğundan emin olun
 
-**2. Cihaz durumu güncellenmiyor**
-- TIS gateway'in çalıştığından emin olun
-- Network trafiğini kontrol edin
-- Integration'ı yeniden yapılandırın
+**Seri port bağlantı hatası:**
+- Seri port adresini kontrol edin (`ls /dev/tty*`)
+- Kullanıcı izinlerini kontrol edin (`sudo usermod -a -G dialout homeassistant`)
+- RS485 adaptörünün düzgün takıldığından emin olun
+- Baud hızının cihazlarla eşleştiğinden emin olun
 
-**3. Komutlar çalışmıyor**
-- Cihaz adreslerinin doğru olduğunu kontrol edin
-- UDP paket formatını kontrol edin
+**Cihazlar yanıt vermiyor:**
+- Cihaz online durumunu kontrol edin
+- CRC hatalarını log'lardan takip edin
+- Cihazı yeniden başlatmayı deneyin
+- Sinyallerin güçlü olduğundan emin olun
 
-### Log Kontrolü
+### Debug Modu
 
 ```yaml
 # configuration.yaml
 logger:
   default: info
   logs:
-    custom_components.tis_control: debug
+    custom_components.tis_home_automation: debug
+    tis_protocol: debug
 ```
 
-## 🤝 Katkıda Bulunma
+## 📊 Desteklenen Cihaz Tipleri
 
-1. Bu repository'yi fork edin
-2. Yeni bir branch oluşturun (`git checkout -b feature/yeni-ozellik`)
-3. Değişikliklerinizi commit edin (`git commit -am 'Yeni özellik eklendi'`)
-4. Branch'inizi push edin (`git push origin feature/yeni-ozellik`)
-5. Pull Request oluşturun
+| Kategori | Cihaz Tipi | OpCode | Açıklama |
+|----------|------------|--------|----------|
+| **Aydınlatma** | Switch 1-4 Gang | 0x0100-0x0103 | Basit anahtar |
+| | Dimmer 1-2 Gang | 0x0110-0x0111 | Dimmer kontrolü |  
+| | Curtain Switch | 0x0120 | Perde kontrolü |
+| | Scene Switch | 0x0130 | Sahne kontrolü |
+| **İklim** | AC Controller | 0x0200 | Klima kontrolü |
+| | Thermostat | 0x0201 | Termostat |
+| | Floor Heating | 0x0202 | Yerden ısıtma |
+| | Fan Controller | 0x0210 | Fan kontrolü |
+| **Sensör** | Motion Sensor | 0x0300 | Hareket algılayıcı |
+| | Door/Window | 0x0301 | Kapı/pencere sensörü |
+| | Temperature | 0x0302 | Sıcaklık sensörü |
+| | Humidity | 0x0303 | Nem sensörü |
+| | Light Sensor | 0x0304 | Işık sensörü |
+| | Health Sensor | 0x0310 | 6-in-1 sensör |
+| **Güvenlik** | Door Lock | 0x0400 | Akıllı kilit |
+| | Alarm Panel | 0x0401 | Alarm paneli |
+| | Smoke Detector | 0x0305 | Duman dedektörü |
+
+## 🤝 Katkı
+
+Katkılarınızı bekliyoruz! Lütfen:
+
+1. Fork yapın
+2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
+3. Commit yapın (`git commit -m 'Add amazing feature'`)
+4. Push yapın (`git push origin feature/amazing-feature`)
+5. Pull Request açın
 
 ## 📝 Lisans
 
-Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICENSE) dosyasını inceleyin.
+Bu proje MIT lisansı altında yayınlanmıştır. Detaylar için `LICENSE` dosyasını inceleyin.
 
-## 🙏 Teşekkürler
+## 🔗 Bağlantılar
 
-- Home Assistant topluluğuna
-- TIS protokol geliştirici ekibine
-- HACS projesine
+- [Home Assistant](https://www.home-assistant.io/)
+- [HACS](https://hacs.xyz/)
+- [TIS Protocol Documentation](./docs/TIS_PROTOCOL.md)
+- [Issue Tracker](https://github.com/your-username/tis-home-automation/issues)
 
-## 📞 İletişim
+## 📞 Destek
 
-- GitHub Issues: Bu repository'de sorun bildirebilirsiniz
-- Geliştirici: Repository sahibi ile iletişime geçebilirsiniz
+Sorunlarınız için:
+1. [GitHub Issues](https://github.com/your-username/tis-home-automation/issues)
+2. [Home Assistant Community](https://community.home-assistant.io/)
+3. [Discord Server](https://discord.gg/home-assistant)
 
 ---
 
-**Not**: Bu integration henüz beta aşamasındadır. Üretim ortamında kullanırken dikkatli olun.
+**⭐ Bu proje size yardımcı olduysa, GitHub'da yıldız vermeyi unutmayın!**
