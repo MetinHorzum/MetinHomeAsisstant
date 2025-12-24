@@ -1,6 +1,6 @@
-import time
-
 from __future__ import annotations
+
+import time
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant
