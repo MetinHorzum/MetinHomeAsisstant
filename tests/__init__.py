@@ -1,1 +1,0 @@
-"""Tests for TIS Home Automation integration."""

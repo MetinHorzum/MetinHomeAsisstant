@@ -1,1 +1,0 @@
-"""Mock objects for TIS Home Automation testing."""
