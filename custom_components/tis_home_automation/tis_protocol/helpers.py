@@ -492,22 +492,31 @@ def validate_packet_structure(packet_data: bytes) -> Dict[str, Any]:
     
     return validation
 
+# ================== ALIASES FOR COMPATIBILITY ==================
+
+# Add aliases for functions expected by other modules
+build_tis_packet = build_packet
+calculate_crc16 = pack_crc_c_style
+get_ip_bytes = lambda ip: [int(part) for part in ip.split(".")]
+
 # ================== EXPORTS ==================
 
 __all__ = [
     # Byte manipulation
     'bytes_divmod',
-    'bytes2hex', 
+    'bytes2hex',
     'hex_to_bytes',
     'hexstr',
     
     # CRC functions (verified)
     'packCRC',
-    'checkCRC', 
+    'checkCRC',
     'pack_crc_c_style',
+    'calculate_crc16',
     
     # Packet functions (verified)
     'build_packet',
+    'build_tis_packet',
     'parse_smartcloud_packet',
     
     # Utility functions
@@ -515,6 +524,7 @@ __all__ = [
     'int_to_8_bit_binary',
     'interpret_additional_data_by_opcode',
     'validate_packet_structure',
+    'get_ip_bytes',
     
     # Constants
     'CRC_TAB'
