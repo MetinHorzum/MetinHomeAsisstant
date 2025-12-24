@@ -138,12 +138,19 @@ class TisUdpClient:
             }
             add = parsed.get("additional_data") or b""
             info["additional_hex"] = add.hex(" ")
-            try:
-                name = add.decode("ascii", errors="ignore").rstrip("\x00").strip()
-                if name:
-                    info["name"] = name
-            except Exception:
-                pass
+
+            # Device name is typically a null-terminated string inside the 20-byte payload.
+            # We try UTF-8 first (your example includes Turkish 'ı' = C4 B1), then CP1254.
+            raw_name = add.split(b"\x00", 1)[0]
+            for enc in ("utf-8", "cp1254", "latin-1"):
+                try:
+                    name = raw_name.decode(enc).strip()
+                    if name:
+                        info["name"] = name
+                        info["name_encoding"] = enc
+                        break
+                except Exception:
+                    continue
 
             self.state.discovered[device_key] = info
 
