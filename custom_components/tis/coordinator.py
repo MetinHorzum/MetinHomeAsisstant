@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import socket
 import time
 from dataclasses import dataclass, field
@@ -17,6 +18,8 @@ from .const import (
 )
 
 from .protocol import build_packet, parse_smartcloud_packet
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _extract_cstr(data: bytes) -> str:
@@ -160,7 +163,7 @@ class TisCoordinator(DataUpdateCoordinator[TisState]):
     def __init__(self, hass: HomeAssistant, client: TisUdpClient):
         super().__init__(
             hass=hass,
-            logger=None,
+            logger=_LOGGER,
             name=f"{DOMAIN}_coordinator",
             update_interval=None,
         )
