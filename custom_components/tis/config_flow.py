@@ -3,18 +3,18 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant import config_entries
+from homeassistant.data_entry_flow import FlowResult
 
 from .const import DOMAIN, DEFAULT_HOST, DEFAULT_PORT
 
 
-class TisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for TIS."""
 
     VERSION = 1
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None):
-        # Import voluptuous lazily to avoid hard import-time failures showing up as
-        # "Exception importing config_flow" with limited context.
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        # Lazy import so any voluptuous issues show up clearly in logs
         import voluptuous as vol
 
         if user_input is not None:
