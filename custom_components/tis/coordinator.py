@@ -121,13 +121,23 @@ class TisUdpClient:
                 continue
 
             src_ip = addr[0]
+            src_dev = parsed.get("source_device") or [0, 0]
+            tgt_dev = parsed.get("target_device") or [0, 0]
+            # Discovery response'lar gateway IP'sinden gelebilir (hepsi aynı src_ip).
+            # Bu yüzden anahtar olarak "source_device" çiftini kullanıyoruz.
+            device_key = f"{src_dev[0]:02X}{src_dev[1]:02X}"
             info = {
                 "src_ip": src_ip,
-                "source_device": parsed.get("source_device"),
+                "source_device": src_dev,
+                "target_device": tgt_dev,
                 "device_type": parsed.get("device_type"),
                 "name": None,
+                "op_code": op_code,
+                "length": parsed.get("length"),
+                "crc_valid": parsed.get("crc_valid"),
             }
             add = parsed.get("additional_data") or b""
+            info["additional_hex"] = add.hex(" ")
             try:
                 name = add.decode("ascii", errors="ignore").rstrip("\x00").strip()
                 if name:
@@ -135,7 +145,7 @@ class TisUdpClient:
             except Exception:
                 pass
 
-            self.state.discovered[src_ip] = info
+            self.state.discovered[device_key] = info
 
 
 class TisCoordinator(DataUpdateCoordinator[TisState]):

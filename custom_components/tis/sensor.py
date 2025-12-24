@@ -16,6 +16,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             TisDiscoveredCountSensor(coordinator),
+            TisDevicesDumpSensor(coordinator),
             TisLastRxAgeSensor(coordinator),
         ],
         True,
@@ -40,6 +41,36 @@ class TisDiscoveredCountSensor(_BaseTisSensor):
     @property
     def native_value(self):
         return len(self.coordinator.data.discovered)
+
+
+class TisDevicesDumpSensor(_BaseTisSensor):
+    """Tek bir entity altında bulunan cihazların ham/decoded bilgisini gösterir.
+
+    Home Assistant UI'da state olarak cihaz sayısını gösterir;
+    detaylar `attributes` içinde listelenir.
+    """
+
+    _attr_name = "Devices (details)"
+    _attr_unique_id = "tis_devices_details"
+
+    @property
+    def native_value(self):
+        return len(self.coordinator.data.discovered)
+
+    @property
+    def extra_state_attributes(self):
+        # Dict -> list'e çevir, UI'da daha okunur.
+        devices = []
+        for dev_key, info in (self.coordinator.data.discovered or {}).items():
+            item = {"id": dev_key}
+            item.update(info)
+            devices.append(item)
+        # Stabil sıralama
+        devices.sort(key=lambda x: x.get("id", ""))
+        return {
+            "devices": devices,
+            "count": len(devices),
+        }
 
 
 class TisLastRxAgeSensor(_BaseTisSensor):
