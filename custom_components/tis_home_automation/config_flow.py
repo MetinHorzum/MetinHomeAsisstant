@@ -52,10 +52,9 @@ except ImportError:
 
 _LOGGER = logging.getLogger(__name__)
 
-class TISConfigFlow(config_entries.ConfigFlow):
+class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for TIS Home Automation."""
     
-    domain = DOMAIN
     VERSION = 1
     
     def __init__(self):

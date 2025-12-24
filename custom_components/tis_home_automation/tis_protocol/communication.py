@@ -32,7 +32,7 @@ DEFAULT_RETRY_COUNT = 3
 DEFAULT_DISCOVERY_TIMEOUT = 10.0
 BROADCAST_IP = "255.255.255.255"
 DISCOVERY_OPCODE = [0x00, 0x0E]  # Device discovery
-DISCOVERY_RESPONSE_OPCODES = [0xF004, 0x000F, 0xDA45, 0xDA44, 0x0002]  # Multiple response types
+DISCOVERY_RESPONSE_OPCODE = 0x000F
 
 class TISCommunicationError(Exception):
     """Base exception for TIS communication errors"""
@@ -248,40 +248,22 @@ class TISUDPTransport(TISTransport):
         try:
             while self._running and self.socket:
                 try:
-                    # Set a shorter timeout to avoid blocking
-                    self.socket.settimeout(1.0)
                     data, addr = await asyncio.get_event_loop().run_in_executor(
                         None, self.socket.recvfrom, 1024
                     )
                     
-                    _LOGGER.debug(f"UDP received {len(data)} bytes from {addr}: {data[:50]}...")
-                    
                     # Parse packet
                     parsed = parse_smartcloud_packet(data)
-                    if parsed and parsed.get('valid'):
+                    if parsed.get('valid'):
                         op_code = parsed.get('op_code', 0)
-                        _LOGGER.info(f"Parsed SMARTCLOUD packet: OpCode=0x{op_code:04X} from {addr}")
                         
-                        # Call ALL registered callbacks for any OpCode that might be related
-                        callback_called = False
-                        for registered_opcode, callback in self._response_callbacks.items():
-                            # Call callback for exact match OR discovery response opcodes
-                            if (registered_opcode == op_code or
-                                op_code in DISCOVERY_RESPONSE_OPCODES):
-                                try:
-                                    _LOGGER.info(f"Calling callback for OpCode 0x{op_code:04X}")
-                                    if asyncio.iscoroutinefunction(callback):
-                                        await callback(parsed, addr)
-                                    else:
-                                        callback(parsed, addr)
-                                    callback_called = True
-                                except Exception as e:
-                                    _LOGGER.error(f"Callback error for OpCode 0x{op_code:04X}: {e}")
-                        
-                        if not callback_called:
-                            _LOGGER.warning(f"No callback registered for OpCode 0x{op_code:04X}")
-                    else:
-                        _LOGGER.debug(f"Non-SMARTCLOUD packet from {addr}: {data[:20]}...")
+                        # Call registered callback if exists
+                        if op_code in self._response_callbacks:
+                            callback = self._response_callbacks[op_code]
+                            if asyncio.iscoroutinefunction(callback):
+                                asyncio.create_task(callback(parsed, addr))
+                            else:
+                                callback(parsed, addr)
                     
                 except socket.timeout:
                     continue
@@ -491,12 +473,11 @@ class TISCommunicationManager:
         """Add a transport to the manager"""
         self.transports.append(transport)
         
-        # Register discovery response callbacks for all OpCodes
-        for response_opcode in DISCOVERY_RESPONSE_OPCODES:
-            transport.register_response_callback(
-                response_opcode,
-                self._handle_discovery_response
-            )
+        # Register discovery response callback
+        transport.register_response_callback(
+            DISCOVERY_RESPONSE_OPCODE,
+            self._handle_discovery_response
+        )
     
     def add_discovery_callback(self, callback: Callable):
         """Add callback for discovered devices"""
@@ -537,86 +518,34 @@ class TISCommunicationManager:
             await self.disconnect_all()
     
     async def discover_devices(
-        self,
+        self, 
         source_ip: str = "192.168.1.100",
-        timeout: float = 30.0  # Extended timeout like rs485_tis_gui_tester.py
+        timeout: float = DEFAULT_DISCOVERY_TIMEOUT
     ) -> Dict[str, TISDevice]:
-        """Discover TIS devices using EXACT strategy from working rs485_tis_gui_tester.py"""
+        """Discover TIS devices on all transports"""
         
         # Clear previous discoveries
         self.discovered_devices.clear()
         
-        # Discovery operation codes from working rs485_tis_gui_tester.py (EXACT ORDER)
-        discovery_opcodes = [0xF003, 0x000E, 0xDA44, 0x0002]
+        # Send discovery on all connected transports
+        discovery_tasks = []
+        for transport in self.transports:
+            if transport.connected:
+                discovery_tasks.append(transport.broadcast_discovery(source_ip))
         
-        if not self.transports:
-            _LOGGER.warning("No transports available for discovery")
-            return {}
-        
-        connected_transports = [t for t in self.transports if t.connected]
-        if not connected_transports:
+        if not discovery_tasks:
             _LOGGER.warning("No connected transports for discovery")
             return {}
         
-        _LOGGER.info(f"🔍 Starting TIS device discovery (rs485_tis_gui_tester.py strategy)")
-        _LOGGER.info(f"📡 Discovery OpCodes: {[f'0x{op:04X}' for op in discovery_opcodes]}")
+        # Send discovery broadcasts
+        await asyncio.gather(*discovery_tasks, return_exceptions=True)
         
-        # Send each discovery OpCode with proper intervals (EXACT like rs485_tis_gui_tester.py)
-        for i, op_code in enumerate(discovery_opcodes):
-            _LOGGER.info(f"📤 Sending discovery OpCode 0x{op_code:04X} ({i+1}/{len(discovery_opcodes)})")
-            
-            # Send discovery packet with this OpCode
-            for transport in connected_transports:
-                await self._send_discovery_opcode(transport, source_ip, op_code)
-            
-            # Wait between OpCodes (EXACT like original: 1 second intervals)
-            if i < len(discovery_opcodes) - 1:
-                await asyncio.sleep(1.0)  # 1 second between different OpCodes
-        
-        # Main timeout wait (EXACT like rs485_tis_gui_tester.py)
-        _LOGGER.info(f"⏳ Discovery packets sent, waiting {timeout}s for responses...")
+        # Wait for responses
+        _LOGGER.info(f"Discovery started, waiting {timeout}s for responses...")
         await asyncio.sleep(timeout)
         
-        # Extended wait for late 000F responses (EXACT like rs485_tis_gui_tester.py: 8+ seconds)
-        if 0x000E in discovery_opcodes:
-            _LOGGER.info("⏳ Waiting additional 8s for late 000F responses (device names)...")
-            await asyncio.sleep(8.0)  # Extended wait like rs485_tis_gui_tester.py
-        
-        # Final wait for any remaining responses (EXACT like rs485_tis_gui_tester.py)
-        _LOGGER.info("⏳ Final wait (5s) for remaining responses...")
-        await asyncio.sleep(5.0)  # Final wait like rs485_tis_gui_tester.py
-        
-        _LOGGER.info(f"✅ Discovery completed. Found {len(self.discovered_devices)} devices")
-        for device_key, device in self.discovered_devices.items():
-            _LOGGER.info(f"   📱 {device_key}: {device.name} (Type: 0x{device.device_type:04X})")
-        
+        _LOGGER.info(f"Discovery completed. Found {len(self.discovered_devices)} devices")
         return self.discovered_devices.copy()
-    
-    async def _send_discovery_opcode(self, transport: TISTransport, source_ip: str, op_code: int) -> bool:
-        """Send discovery packet with specific OpCode (based on rs485_tis_gui_tester.py)"""
-        try:
-            # Build discovery packet for this OpCode
-            discovery_packet = build_packet(
-                operation_code=[(op_code >> 8) & 0xFF, op_code & 0xFF],
-                ip_address=source_ip,
-                device_id=[0xFF, 0xFF],  # Broadcast target
-                source_device_id=[0x01, 0xFE],  # Scanner device ID (like original)
-                device_type=[0xFF, 0xFE],  # Light Dimmer type (like original - 0xFFFE)
-                additional_packets=[]
-            )
-            
-            # Send packet
-            result = await transport.send_packet(discovery_packet)
-            if result:
-                _LOGGER.debug(f"Discovery OpCode 0x{op_code:04X} sent via {transport.__class__.__name__}")
-            else:
-                _LOGGER.warning(f"Failed to send discovery OpCode 0x{op_code:04X} via {transport.__class__.__name__}")
-            
-            return result
-            
-        except Exception as e:
-            _LOGGER.error(f"Error sending discovery OpCode 0x{op_code:04X}: {e}")
-            return False
     
     async def send_to_device(
         self,
@@ -644,67 +573,43 @@ class TISCommunicationManager:
         return await target_transport.send_packet(packet)
     
     async def _handle_discovery_response(self, parsed_packet: Dict, source_addr: Any):
-        """Handle discovery response packets - IMPROVED VERSION"""
+        """Handle discovery response packets"""
         try:
-            _LOGGER.info(f"Processing discovery response: {parsed_packet}")
-            
             # Extract device information
             device_id = parsed_packet.get('source_device', [0x00, 0x00])
             device_type = parsed_packet.get('device_type', 0xFFFF)
-            op_code = parsed_packet.get('op_code', 0x0000)
             additional_data = parsed_packet.get('additional_data', b'')
-            ip_address = parsed_packet.get('ip', "")
             
-            _LOGGER.info(f"Device info: ID={device_id}, Type=0x{device_type:04X}, OpCode=0x{op_code:04X}, IP={ip_address}")
-            
-            # Try to decode device name from additional_data
+            # Try to decode device name
             device_name = ""
-            if additional_data:
-                try:
-                    # Try UTF-8 first, then ASCII
-                    try:
-                        device_name = additional_data.decode('utf-8', errors='ignore').rstrip('\x00').strip()
-                    except:
-                        device_name = additional_data.decode('ascii', errors='ignore').rstrip('\x00').strip()
-                    
-                    if device_name:
-                        _LOGGER.info(f"Decoded device name: '{device_name}'")
-                except Exception as e:
-                    _LOGGER.warning(f"Device name decode error: {e}")
-            
-            # Create device key (using source_device as key)
-            device_key = f"{device_id[0]:02X}{device_id[1]:02X}"
-            
-            # Get device type name from our mapping (if available)
-            device_type_name = "Unknown"
             try:
-                # This would require our device type mapping
-                device_type_name = f"Type_0x{device_type:04X}"
+                if additional_data:
+                    device_name = additional_data.decode('ascii', errors='ignore').rstrip('\x00')
             except:
                 pass
             
-            # Create final device name
-            final_device_name = device_name if device_name else f"TIS {device_type_name} ({device_key})"
+            # Create device key
+            device_key = f"{device_id[0]:02X}{device_id[1]:02X}"
             
-            # Create or update TIS device
+            # Create TIS device
             device = TISDevice(
                 device_id=device_id,
                 device_type=device_type,
-                name=final_device_name,
-                ip_address=ip_address,
+                name=device_name or f"TIS Device {device_key}",
+                ip_address=parsed_packet.get('ip', ""),
                 source_address=source_addr
             )
             
-            # Store discovered device (update if exists)
+            # Store discovered device
             self.discovered_devices[device_key] = device
             
-            _LOGGER.info(f"🔍 DEVICE DISCOVERED: '{device.name}' ({device_key}) Type: 0x{device_type:04X} IP: {ip_address}")
+            _LOGGER.info(f"Discovered device: {device.name} ({device_key}) Type: 0x{device_type:04X}")
             
-            # Notify discovery callbacks
+            # Notify callbacks
             for callback in self._discovery_callbacks:
                 try:
                     if asyncio.iscoroutinefunction(callback):
-                        await callback(device)  # Use await instead of create_task for immediate execution
+                        asyncio.create_task(callback(device))
                     else:
                         callback(device)
                 except Exception as e:
@@ -712,8 +617,6 @@ class TISCommunicationManager:
                     
         except Exception as e:
             _LOGGER.error(f"Discovery response handling error: {e}")
-            import traceback
-            _LOGGER.error(f"Traceback: {traceback.format_exc()}")
 
 # ================== UTILITY FUNCTIONS ==================
 
@@ -795,5 +698,5 @@ __all__ = [
     'DEFAULT_DISCOVERY_TIMEOUT',
     'BROADCAST_IP',
     'DISCOVERY_OPCODE',
-    'DISCOVERY_RESPONSE_OPCODES'
+    'DISCOVERY_RESPONSE_OPCODE'
 ]

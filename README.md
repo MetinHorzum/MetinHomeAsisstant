@@ -1,261 +1,313 @@
-# TIS Home Automation Integration for Home Assistant
+# TIS Home Automation - Home Assistant Integration
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/release/yourusername/tis-home-automation-ha.svg?style=for-the-badge)](https://github.com/yourusername/tis-home-automation-ha/releases)
-[![License](https://img.shields.io/github/license/yourusername/tis-home-automation-ha.svg?style=for-the-badge)](LICENSE)
+TIS akıllı ev cihazları için kapsamlı Home Assistant entegrasyonu. Bu entegrasyon, TIS protokolünü kullanarak 150+ farklı cihaz tipini destekler ve hem UDP hem de RS485 haberleşme seçenekleri sunar.
 
-Home Assistant custom component for **TIS Home Automation** systems. This integration provides comprehensive support for TIS devices including switches, lights, climate control (AC units), sensors, and binary sensors.
+## 🎯 Özellikler
 
-## ✨ Features
+### 📡 İletişim Desteği
+- **UDP Network (Port 6000)**: Ağ üzerinden haberleşme
+- **RS485 Serial**: Seri port üzerinden doğrudan bağlantı
+- **Otomatik Cihaz Keşfi**: SMARTCLOUD protokolü ile cihaz tespiti
+- **Çift Transport**: Aynı anda hem UDP hem RS485 desteği
 
-- 🔌 **Multiple Platform Support**: Switch, Light, Climate, Sensor, Binary Sensor
-- 🌐 **Dual Transport**: UDP (Port 6000) and RS485 serial communication
-- 🔍 **Auto Discovery**: Automatic device discovery on your network
-- 🏠 **150+ Device Types**: Comprehensive TIS device type mapping
-- 🇹🇷 **Turkish Language Support**: Native Turkish language support
-- ⚡ **Real-time Updates**: Live status updates from TIS devices  
-- 🎛️ **Climate Control**: Full AC unit control (temperature, mode, fan speed)
-- 📊 **Sensor Data**: Temperature, humidity, light, and other sensor readings
-- 🔧 **HACS Compatible**: Easy installation through HACS
+### 🏠 Desteklenen Cihazlar
+- **Anahtar**: 1-4 gang anahtarlar, sahne kontrolleri
+- **Dimmer**: 1-2 gang dimmerlar, RGB/tunable white
+- **Klima**: AC kontrolleri, termostatlar, yerden ısıtma
+- **Sensörler**: Sıcaklık, nem, hareket, kapı/pencere, duman, gaz
+- **Sağlık Sensörleri**: Işık, gürültü, eCO2, TVOC, hava kalitesi
+- **Güvenlik**: Alarm sistemleri, kameralar
+- **Ses/Görüntü**: TV, ses sistemi kontrolleri
 
-## 🚀 Supported TIS Devices
+### 🛠 Gelişmiş Özellikler
+- **Asenkron İletişim**: Non-blocking haberleşme
+- **CRC Doğrulama**: Paket bütünlüğü kontrolü
+- **Cihaz Sağlığı**: Online/offline takibi
+- **Özel Servisler**: Ham komut gönderme, cihaz sıfırlama
+- **Çoklu Dil**: Türkçe ve İngilizce destekli
+- **HACS Entegrasyonu**: Kolay kurulum ve güncelleme
 
-This integration supports **150+ TIS device types** including:
+## 🚀 Kurulum
 
-- **Switches & Dimmers** (0x806C, 0x807A, 0x80BA)
-- **Lights & LED Controllers** (0x8090, 0x80B0)  
-- **Climate Control** (AC units, thermostats)
-- **Sensors** (Temperature, humidity, light, motion)
-- **Binary Sensors** (Door/window, motion, occupancy)
-- **Smart Panels & Controllers**
+### Yöntem 1: HACS (Önerilen)
 
-Real device examples discovered during testing:
-- "Mekanik", "Mutfak", "Toplantı Odası", "AR-GE", "Elektronik", "Pano", "Y.KapıUST"
+1. HACS'i açın
+2. **Integrations** sekmesine gidin
+3. Sağ üst köşeden **⋮** menüsüne tıklayın
+4. **Custom repositories** seçin
+5. Repository URL'ini ekleyin: `https://github.com/your-username/tis-home-automation`
+6. Category: **Integration**
+7. **TIS Home Automation** entegrasyonunu bulup yükleyin
+8. Home Assistant'ı yeniden başlatın
 
-## 📋 Requirements
+### Yöntem 2: Manuel Kurulum
 
-- Home Assistant 2023.12.0 or later
-- TIS Home Automation devices on your network
-- Network access to TIS devices (UDP Port 6000)
-- Optional: RS485 serial interface for direct communication
+1. Bu repository'yi indirin
+2. `custom_components/tis_home_automation` klasörünü Home Assistant'ın `custom_components` dizinine kopyalayın
+3. `tis_protocol` klasörünü de aynı dizine kopyalayın
+4. Gerekli bağımlılıkları yükleyin:
+   ```bash
+   pip install pyserial
+   ```
+5. Home Assistant'ı yeniden başlatın
 
-## 📥 Installation
+## ⚙️ Yapılandırma
 
-### Method 1: HACS (Recommended)
+### 1. Entegrasyon Ekleme
 
-1. Open HACS in Home Assistant
-2. Go to **Integrations**  
-3. Click the **+** button and search for "**TIS Home Automation**"
-4. Click **Install**
-5. Restart Home Assistant
+1. **Ayarlar** > **Cihazlar ve Servisler**'e gidin
+2. **Entegrasyon Ekle**'ye tıklayın
+3. **TIS Home Automation**'ı arayın ve seçin
 
-### Method 2: Manual Installation
+### 2. İletişim Türü Seçimi
 
-1. Download the latest release from [Releases](https://github.com/yourusername/tis-home-automation-ha/releases)
-2. Extract to `custom_components/tis_home_automation/` in your HA config directory
-3. Restart Home Assistant
+**UDP Ağ İletişimi:**
+- Yerel IP adresi: Home Assistant sunucunuzun IP'si
+- Port: 6000 (varsayılan)
+- Çoğu kurulum için önerilen seçenek
 
-## ⚙️ Configuration
+**RS485 Seri İletişim:**
+- Seri port: RS485 adaptörünüzün portu (örn. `/dev/ttyUSB0`)
+- Baud hızı: 9600 (varsayılan)
+- Doğrudan kablo bağlantısı gerektirir
 
-### Add Integration
+### 3. Cihaz Keşfi
 
-1. Go to **Settings** → **Devices & Services**
-2. Click **+ Add Integration**
-3. Search for "**TIS Home Automation**"
-4. Follow the setup wizard
+- Keşif süresini ayarlayın (5-120 saniye)
+- Entegrasyon otomatik olarak TIS cihazlarını bulacak
+- Bulunan cihazlar otomatik olarak uygun platform'lara eklenecek
 
-### Configuration Options
+## 📱 Kullanım
 
-#### Network Configuration (UDP)
-- **Local IP Address**: Your Home Assistant IP (auto-detected)
-- **Port**: TIS communication port (default: 6000)
-- **Discovery Timeout**: Device discovery timeout (default: 30s)
+### Temel Entity'ler
 
-#### Serial Configuration (RS485) - Optional
-- **Serial Port**: RS485 interface port (e.g., `/dev/ttyUSB0`)
-- **Baud Rate**: Communication speed (default: 9600)
-
-### Manual Configuration (YAML) - Advanced
-
+**Anahtar (Switch):**
 ```yaml
-# configuration.yaml
-tis_home_automation:
-  - platform: udp
-    local_ip: "192.168.1.100"  # Your Home Assistant IP
-    port: 6000
-    discovery_timeout: 30
-    
-  - platform: serial  # Optional RS485
-    port: "/dev/ttyUSB0"
-    baudrate: 9600
+# Tek gang anahtar
+switch.tis_switch_01fe
+
+# Çoklu gang anahtar  
+switch.tis_switch_gang_1_02fe
+switch.tis_switch_gang_2_02fe
 ```
 
-## 🏠 Device Auto-Discovery
-
-The integration automatically discovers TIS devices on your network:
-
-1. **Multi-Stage Discovery**: Uses multiple OpCodes for comprehensive device detection
-2. **Extended Timeout**: 43+ seconds total discovery time for reliable detection  
-3. **Device Naming**: Automatically extracts device names (supports Turkish characters)
-4. **Device Classification**: Maps devices to appropriate Home Assistant platforms
-
-### Discovery Process
-- Sends discovery packets: `0xF003`, `0x000E`, `0xDA44`, `0x0002`
-- Listens for responses: `0xF004`, `0x000F`, `0xDA45`, `0xDA44`, `0x0002`
-- Processes device information and creates entities
-
-## 🎛️ Supported Entities
-
-### Switch Platform
-- Light switches and dimmers
-- Power outlets and relays
-- Scene controllers
-
-### Light Platform  
-- Dimmable lights
-- LED strip controllers
-- Smart bulbs
-
-### Climate Platform
-- Air conditioning units
-- Temperature control
-- Fan speed control
-- Mode selection (Cool/Heat/Fan/Auto)
-
-### Sensor Platform
-- Temperature sensors
-- Humidity sensors  
-- Light level sensors
-- Power consumption
-- Energy monitoring
-
-### Binary Sensor Platform
-- Motion detectors
-- Door/window sensors
-- Occupancy sensors
-- Device status indicators
-
-## 🔧 Services
-
-### Custom Services
-
-#### `tis_home_automation.send_command`
-Send raw commands to TIS devices.
-
+**Dimmer (Light):**
 ```yaml
-service: tis_home_automation.send_command
-data:
-  device_id: [0x01, 0x12]
-  operation_code: [0x02, 0x81] 
-  additional_data: [0x01]
+# Dimmer kontrolü
+light.tis_dimmer_03fe
+# Brightness: 0-255
+# Renk desteği (RGB modeller için)
 ```
 
-#### `tis_home_automation.discover_devices`
-Manually trigger device discovery.
+**Klima (Climate):**
+```yaml
+# AC kontroller
+climate.tis_ac_04fe
+# Modes: cool, heat, fan_only, auto, off
+# Temperature: 16-30°C
+# Fan speeds: auto, low, medium, high
+```
 
+**Sensör (Sensor):**
+```yaml
+# Sıcaklık sensörü
+sensor.tis_temperature_05fe
+
+# Sağlık sensörü (6 ayrı sensör)
+sensor.tis_health_sensor_lux_06fe
+sensor.tis_health_sensor_noise_06fe  
+sensor.tis_health_sensor_eco2_06fe
+sensor.tis_health_sensor_tvoc_06fe
+sensor.tis_health_sensor_temperature_06fe
+sensor.tis_health_sensor_humidity_06fe
+```
+
+### Özel Servisler
+
+**Cihaz Keşfi:**
 ```yaml
 service: tis_home_automation.discover_devices
 data:
-  timeout: 30
+  source_ip: "192.168.1.100"  # isteğe bağlı
+  timeout: 30  # saniye
 ```
 
-## 🛠️ Troubleshooting
+**Ham Komut Gönderme:**
+```yaml
+service: tis_home_automation.send_raw_command  
+data:
+  device_id: "01FE"  # hex string veya [1, 254]
+  op_code: "1101"    # hex string veya [17, 1]  
+  additional_data: [50]  # isteğe bağlı
+```
 
-### Common Issues
+**Klima Kontrolü:**
+```yaml
+service: tis_home_automation.ac_control
+data:
+  device_id: "04FE"
+  power: "on"
+  mode: "cool" 
+  temperature: 22
+  fan_speed: "medium"
+```
 
-#### No Devices Found
-1. Verify TIS devices are powered and on the network
-2. Check your Home Assistant IP is in the same network segment
-3. Ensure UDP port 6000 is not blocked by firewall
-4. Try increasing discovery timeout
+**Aydınlatma Kontrolü:**
+```yaml
+service: tis_home_automation.lighting_control
+data:
+  device_id: "03FE"
+  power: "on"
+  brightness: 75  # 0-100%
+  gang_index: 0   # çoklu gang için
+```
 
-#### Connection Issues
-1. Verify network connectivity to TIS devices
-2. Check if other applications are using port 6000
-3. Ensure Home Assistant has network access
+## 🔧 Gelişmiş Yapılandırma
 
-#### Device Control Not Working
-1. Verify device is responding (check logs)
-2. Confirm device type mapping is correct
-3. Check if device requires specific command format
-
-### Enable Debug Logging
-
-Add to `configuration.yaml`:
+### Services.yaml Örnekleri
 
 ```yaml
+# Sabah rutini
+morning_routine:
+  sequence:
+    - service: tis_home_automation.lighting_control
+      data:
+        device_id: "01FE"
+        power: "on" 
+        brightness: 80
+    - service: tis_home_automation.ac_control
+      data:
+        device_id: "04FE"
+        power: "on"
+        mode: "cool"
+        temperature: 24
+
+# Gece modu
+night_mode:
+  sequence:
+    - service: tis_home_automation.lighting_control
+      data:
+        device_id: "01FE"
+        brightness: 10
+    - service: tis_home_automation.ac_control
+      data:
+        device_id: "04FE"
+        mode: "auto"
+        temperature: 26
+```
+
+### Otomasyonlar
+
+```yaml
+# Hareket algılandığında ışığı aç
+automation:
+  - alias: "TIS Motion Light"
+    trigger:
+      platform: state
+      entity_id: binary_sensor.tis_motion_07fe
+      to: "on"
+    action:
+      service: switch.turn_on
+      entity_id: switch.tis_switch_01fe
+
+# Sıcaklık çok yüksek olduğunda klimayı aç  
+  - alias: "TIS Auto AC"
+    trigger:
+      platform: numeric_state
+      entity_id: sensor.tis_temperature_05fe
+      above: 28
+    action:
+      service: tis_home_automation.ac_control
+      data:
+        device_id: "04FE"
+        power: "on"
+        mode: "cool"
+        temperature: 24
+```
+
+## 🐛 Sorun Giderme
+
+### Yaygın Sorunlar
+
+**Cihazlar bulunamıyor:**
+- IP adresi ve port ayarlarını kontrol edin
+- Ağ bağlantısını doğrulayın
+- Güvenlik duvarı ayarlarını kontrol edin
+- TIS cihazlarının aynı ağda olduğundan emin olun
+
+**Seri port bağlantı hatası:**
+- Seri port adresini kontrol edin (`ls /dev/tty*`)
+- Kullanıcı izinlerini kontrol edin (`sudo usermod -a -G dialout homeassistant`)
+- RS485 adaptörünün düzgün takıldığından emin olun
+- Baud hızının cihazlarla eşleştiğinden emin olun
+
+**Cihazlar yanıt vermiyor:**
+- Cihaz online durumunu kontrol edin
+- CRC hatalarını log'lardan takip edin
+- Cihazı yeniden başlatmayı deneyin
+- Sinyallerin güçlü olduğundan emin olun
+
+### Debug Modu
+
+```yaml
+# configuration.yaml
 logger:
+  default: info
   logs:
     custom_components.tis_home_automation: debug
-    custom_components.tis_home_automation.tis_protocol: debug
+    tis_protocol: debug
 ```
 
-### Useful Debug Commands
+## 📊 Desteklenen Cihaz Tipleri
 
-```bash
-# Check UDP traffic on port 6000
-sudo tcpdump -i any -X port 6000
+| Kategori | Cihaz Tipi | OpCode | Açıklama |
+|----------|------------|--------|----------|
+| **Aydınlatma** | Switch 1-4 Gang | 0x0100-0x0103 | Basit anahtar |
+| | Dimmer 1-2 Gang | 0x0110-0x0111 | Dimmer kontrolü |  
+| | Curtain Switch | 0x0120 | Perde kontrolü |
+| | Scene Switch | 0x0130 | Sahne kontrolü |
+| **İklim** | AC Controller | 0x0200 | Klima kontrolü |
+| | Thermostat | 0x0201 | Termostat |
+| | Floor Heating | 0x0202 | Yerden ısıtma |
+| | Fan Controller | 0x0210 | Fan kontrolü |
+| **Sensör** | Motion Sensor | 0x0300 | Hareket algılayıcı |
+| | Door/Window | 0x0301 | Kapı/pencere sensörü |
+| | Temperature | 0x0302 | Sıcaklık sensörü |
+| | Humidity | 0x0303 | Nem sensörü |
+| | Light Sensor | 0x0304 | Işık sensörü |
+| | Health Sensor | 0x0310 | 6-in-1 sensör |
+| **Güvenlik** | Door Lock | 0x0400 | Akıllı kilit |
+| | Alarm Panel | 0x0401 | Alarm paneli |
+| | Smoke Detector | 0x0305 | Duman dedektörü |
 
-# Test UDP connectivity
-nc -u [device_ip] 6000
-```
+## 🤝 Katkı
 
-## 📊 Network Protocol
+Katkılarınızı bekliyoruz! Lütfen:
 
-This integration uses the **TIS SMARTCLOUD Protocol**:
+1. Fork yapın
+2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
+3. Commit yapın (`git commit -m 'Add amazing feature'`)
+4. Push yapın (`git push origin feature/amazing-feature`)
+5. Pull Request açın
 
-- **Transport**: UDP Port 6000 (primary) + RS485 serial (optional)
-- **Packet Format**: IP(4) + "SMARTCLOUD"(10) + Separator(2) + Length(1) + Data + CRC(2)
-- **Discovery**: Multi-OpCode discovery with extended timeouts
-- **CRC Validation**: 16-bit CRC for packet integrity
-- **Device Types**: 150+ mapped device types with Turkish support
+## 📝 Lisans
 
-## 🤝 Contributing
+Bu proje MIT lisansı altında yayınlanmıştır. Detaylar için `LICENSE` dosyasını inceleyin.
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md).
-
-### Development Setup
-
-1. Clone this repository
-2. Create a virtual environment
-3. Install development dependencies: `pip install -r requirements-dev.txt`
-4. Run tests: `pytest`
-
-### Adding New Device Types
-
-1. Identify device OpCodes and responses
-2. Add device type mapping in `device_types.py`
-3. Implement entity class if needed
-4. Add tests and documentation
-
-## 📝 Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
-## 📄 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
-
-## 🙏 Acknowledgments
-
-- **TIS Home Automation** for their comprehensive smart home ecosystem
-- **Home Assistant Community** for the excellent platform
-- **HACS** for making custom integrations easily accessible
-
-## 🔗 Links
+## 🔗 Bağlantılar
 
 - [Home Assistant](https://www.home-assistant.io/)
 - [HACS](https://hacs.xyz/)
-- [TIS Home Automation](https://www.tis.com.tr/)
+- [TIS Protocol Documentation](./docs/TIS_PROTOCOL.md)
+- [Issue Tracker](https://github.com/your-username/tis-home-automation/issues)
 
-## 📞 Support
+## 📞 Destek
 
-- Create an [Issue](https://github.com/yourusername/tis-home-automation-ha/issues) for bugs or feature requests
-- Join discussions in [Discussions](https://github.com/yourusername/tis-home-automation-ha/discussions)
-- Check the [Wiki](https://github.com/yourusername/tis-home-automation-ha/wiki) for detailed documentation
+Sorunlarınız için:
+1. [GitHub Issues](https://github.com/your-username/tis-home-automation/issues)
+2. [Home Assistant Community](https://community.home-assistant.io/)
+3. [Discord Server](https://discord.gg/home-assistant)
 
 ---
 
-**⭐ If this integration helps you, please give it a star!**
-
-Made with ❤️ for the Home Assistant community
+**⭐ Bu proje size yardımcı olduysa, GitHub'da yıldız vermeyi unutmayın!**
