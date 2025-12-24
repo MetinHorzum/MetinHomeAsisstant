@@ -4,31 +4,30 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN
-from .coordinator import TisCoordinator, TisUdpClient
 
-PLATFORMS: list[str] = ["sensor"]
-
+PLATFORMS = ["sensor"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    from .coordinator import TisUdpClient, TisCoordinator
+
     host = entry.data["host"]
     port = entry.data["port"]
+    broadcast = entry.data.get("broadcast", "255.255.255.255")
 
-    client = TisUdpClient(hass, host, port)
+    client = TisUdpClient(hass, host, port, broadcast)
     coordinator = TisCoordinator(hass, client)
     await coordinator.async_start()
+
+    # Do one discovery right away so entities show something immediately
+    await coordinator.async_discover()
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    # First discovery to populate devices quickly (non-blocking)
-    hass.async_create_task(coordinator.async_discover())
-
     return True
 
-
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    coordinator: TisCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
+    coordinator = hass.data[DOMAIN].pop(entry.entry_id)
     await coordinator.client.async_stop()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

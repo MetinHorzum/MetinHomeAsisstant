@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
@@ -17,7 +16,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             TisDiscoveredCountSensor(coordinator),
-            TisSecondsSinceLastPacketSensor(coordinator),
+            TisLastRxAgeSensor(coordinator),
         ],
         True,
     )
@@ -30,7 +29,7 @@ class _BaseTisSensor(SensorEntity):
         self.coordinator = coordinator
 
     async def async_update(self):
-        # Manual refresh triggers discovery to make debugging easy
+        # trigger discovery on manual refresh
         await self.coordinator.async_discover()
 
 
@@ -43,14 +42,13 @@ class TisDiscoveredCountSensor(_BaseTisSensor):
         return len(self.coordinator.data.discovered)
 
 
-class TisSecondsSinceLastPacketSensor(_BaseTisSensor):
+class TisLastRxAgeSensor(_BaseTisSensor):
     _attr_name = "Seconds since last packet"
-    _attr_unique_id = "tis_seconds_since_last_packet"
-    _attr_native_unit_of_measurement = "s"
+    _attr_unique_id = "tis_last_rx_age_s"
 
     @property
     def native_value(self):
         ts = self.coordinator.data.last_rx_ts
         if ts is None:
             return None
-        return round(time.time() - ts, 1)
+        return int(time.time() - ts)

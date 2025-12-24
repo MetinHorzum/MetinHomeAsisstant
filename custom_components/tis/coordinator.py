@@ -10,51 +10,26 @@ from typing import Any, Dict, Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import (
-    DOMAIN,
-    DEFAULT_SCAN_TIMEOUT,
-    DISCOVERY_OPCODE,
-    DISCOVERY_RESPONSE_OPCODE,
-)
-
+from .const import DOMAIN, DISCOVERY_OPCODE, DISCOVERY_RESPONSE_OPCODE
 from .protocol import build_packet, parse_smartcloud_packet
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _extract_cstr(data: bytes) -> str:
-    if not data:
-        return ""
-    nul = data.find(b"\x00")
-    if nul != -1:
-        data = data[:nul]
-    try:
-        return data.decode("utf-8", errors="ignore").strip()
-    except Exception:
-        return ""
-
-
-@dataclass
-class TisDeviceInfo:
-    ip: str
-    name: str = ""
-    last_seen: float = 0.0
-    raw: dict = field(default_factory=dict)
-
-
 @dataclass
 class TisState:
     last_rx_ts: float | None = None
-    discovered: Dict[str, TisDeviceInfo] = field(default_factory=dict)
+    discovered: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 class TisUdpClient:
-    """UDP discovery + receive loop for TIS SmartCloud packets."""
+    """UDP discovery + receive loop for TIS SmartCloud."""
 
-    def __init__(self, hass: HomeAssistant, host: str, port: int):
+    def __init__(self, hass: HomeAssistant, host: str, port: int, broadcast: str):
         self.hass = hass
         self.host = host
         self.port = port
+        self.broadcast = broadcast
 
         self._sock: Optional[socket.socket] = None
         self._task: Optional[asyncio.Task] = None
@@ -65,14 +40,13 @@ class TisUdpClient:
             return
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.setblocking(False)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
-        # Listen on the same UDP port as devices send replies to (6000 by default)
+        # listen on port 6000 like your sniffer
         sock.bind(("", self.port))
-
         self._sock = sock
+
         self._task = asyncio.create_task(self._recv_loop())
 
     async def async_stop(self) -> None:
@@ -85,39 +59,38 @@ class TisUdpClient:
             finally:
                 self._sock = None
 
-    def _get_local_ip_for_gateway(self) -> str:
-        """Best-effort local IP detection for the LAN."""
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    def _local_ip_for_gateway(self) -> str:
+        """Best-effort: pick the local IP that routes to the gateway."""
         try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect((self.host, self.port))
-            return s.getsockname()[0]
-        except Exception:
-            return "192.168.1.100"
-        finally:
+            ip = s.getsockname()[0]
             s.close()
+            return ip
+        except Exception:
+            return "0.0.0.0"
 
-    async def discover(self, timeout: float = DEFAULT_SCAN_TIMEOUT) -> Dict[str, TisDeviceInfo]:
-        """Broadcast discovery (0x000E) and collect responses (0x000F)."""
+    async def discover(self, timeout: float = 2.0) -> Dict[str, Dict[str, Any]]:
         await self.async_start()
         assert self._sock is not None
-        loop = asyncio.get_running_loop()
 
-        source_ip = self._get_local_ip_for_gateway()
-
+        source_ip = self._local_ip_for_gateway()
+        # IMPORTANT: build_packet expects *source* IP (your PC was 192.168.1.2 in the sniffer),
+        # not the gateway IP. Using gateway IP causes devices to ignore the request.
         pkt_list = build_packet(
             operation_code=[(DISCOVERY_OPCODE >> 8) & 0xFF, DISCOVERY_OPCODE & 0xFF],
             ip_address=source_ip,
-            device_id=[0xFF, 0xFF],
-            source_device_id=[0x00, 0x00],
+            device_id=[0xFF, 0xFF],  # broadcast target device
+            source_device_id=[0x01, 0xFE],  # matches your GUI defaults
+            device_type=[0xFF, 0xFE],
             additional_packets=[],
         )
         pkt = bytes(pkt_list)
 
-        # Send to broadcast
-        await loop.sock_sendto(self._sock, pkt, ("255.255.255.255", self.port))
+        loop = asyncio.get_running_loop()
+        await loop.sock_sendto(self._sock, pkt, (self.broadcast, self.port))
 
-        # Wait for responses
-        end = time.time() + float(timeout)
+        end = time.time() + timeout
         while time.time() < end:
             await asyncio.sleep(0.05)
 
@@ -132,31 +105,37 @@ class TisUdpClient:
                 data, addr = await loop.sock_recvfrom(self._sock, 4096)
             except asyncio.CancelledError:
                 return
-            except Exception:
-                await asyncio.sleep(0.1)
+            except Exception as err:
+                _LOGGER.debug("UDP recv error: %s", err)
+                await asyncio.sleep(0.2)
                 continue
 
             self.state.last_rx_ts = time.time()
 
             parsed = parse_smartcloud_packet(data)
-            if not parsed.get("valid"):
-                continue
-            if not parsed.get("crc_valid", True):
+            if not parsed or not parsed.get("valid"):
                 continue
 
             op_code = parsed.get("op_code")
-            src_ip = addr[0]
+            if op_code != DISCOVERY_RESPONSE_OPCODE:
+                continue
 
-            if op_code == DISCOVERY_RESPONSE_OPCODE:
-                name = _extract_cstr(parsed.get("additional_data", b""))
-                info = self.state.discovered.get(src_ip) or TisDeviceInfo(ip=src_ip)
-                info.name = name or info.name
-                info.last_seen = time.time()
-                info.raw = parsed
-                self.state.discovered[src_ip] = info
-            else:
-                # For future: handle telemetry opcodes here.
+            src_ip = addr[0]
+            info = {
+                "src_ip": src_ip,
+                "source_device": parsed.get("source_device"),
+                "device_type": parsed.get("device_type"),
+                "name": None,
+            }
+            add = parsed.get("additional_data") or b""
+            try:
+                name = add.decode("ascii", errors="ignore").rstrip("\x00").strip()
+                if name:
+                    info["name"] = name
+            except Exception:
                 pass
+
+            self.state.discovered[src_ip] = info
 
 
 class TisCoordinator(DataUpdateCoordinator[TisState]):
@@ -173,7 +152,7 @@ class TisCoordinator(DataUpdateCoordinator[TisState]):
     async def async_start(self) -> None:
         await self.client.async_start()
 
-    async def async_discover(self) -> Dict[str, TisDeviceInfo]:
-        await self.client.discover()
+    async def async_discover(self) -> Dict[str, Dict[str, Any]]:
+        devices = await self.client.discover()
         self.async_set_updated_data(self.client.state)
-        return dict(self.client.state.discovered)
+        return devices
