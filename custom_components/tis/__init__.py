@@ -5,7 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "button"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from .coordinator import TisUdpClient, TisCoordinator
@@ -19,7 +19,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_start()
 
     # Do one discovery right away so entities show something immediately
-    await coordinator.async_discover()
+    await coordinator.async_discover(show_notification=True)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator

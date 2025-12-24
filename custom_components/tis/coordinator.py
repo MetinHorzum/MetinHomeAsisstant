@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.components import persistent_notification
 
 from .const import DOMAIN, DISCOVERY_OPCODE, DISCOVERY_RESPONSE_OPCODE
 from .protocol import build_packet, parse_smartcloud_packet
@@ -169,7 +170,28 @@ class TisCoordinator(DataUpdateCoordinator[TisState]):
     async def async_start(self) -> None:
         await self.client.async_start()
 
-    async def async_discover(self) -> Dict[str, Dict[str, Any]]:
+    async def async_discover(self, show_notification: bool = False) -> Dict[str, Dict[str, Any]]:
         devices = await self.client.discover()
         self.async_set_updated_data(self.client.state)
+
+        if show_notification:
+            lines = ["**TIS Cihaz Taraması Sonucu**", ""]
+            if not devices:
+                lines.append("Hiç cihaz bulunamadı.")
+            else:
+                for dev_id, info in sorted(devices.items(), key=lambda x: x[0]):
+                    name = info.get("name") or "(isim yok)"
+                    dtype = info.get("device_type")
+                    dtype_hex = f"0x{dtype[0]:02X}{dtype[1]:02X}" if isinstance(dtype, list) and len(dtype) == 2 else str(dtype)
+                    subnet = info.get("source_device", [0, 0])[0]
+                    devno = info.get("source_device", [0, 0])[1]
+                    lines.append(f"- **{name}** — ID: `{dev_id}` (Adres: {subnet}.{devno}) — Type: `{dtype_hex}`")
+
+            persistent_notification.async_create(
+                self.hass,
+                "\n".join(lines),
+                title="TIS Cihaz Listesi",
+                notification_id=f"{DOMAIN}_devices",
+            )
+
         return devices

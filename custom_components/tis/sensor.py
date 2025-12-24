@@ -35,7 +35,7 @@ class _BaseTisSensor(SensorEntity):
 
 
 class TisDiscoveredCountSensor(_BaseTisSensor):
-    _attr_name = "Discovered devices"
+    _attr_name = "TIS Cihaz Sayısı"
     _attr_unique_id = "tis_discovered_count"
 
     @property
@@ -50,7 +50,7 @@ class TisDevicesDumpSensor(_BaseTisSensor):
     detaylar `attributes` içinde listelenir.
     """
 
-    _attr_name = "Devices (details)"
+    _attr_name = "TIS Cihaz Listesi"
     _attr_unique_id = "tis_devices_details"
 
     @property
@@ -67,14 +67,26 @@ class TisDevicesDumpSensor(_BaseTisSensor):
             devices.append(item)
         # Stabil sıralama
         devices.sort(key=lambda x: x.get("id", ""))
+        # İnsan gözüyle okunur kısa liste (Attributes içinde tek parça metin)
+        lines = []
+        for d in devices:
+            name = d.get("name") or "(isim yok)"
+            sd = d.get("source_device") or [0, 0]
+            dtype = d.get("device_type")
+            dtype_hex = (
+                f"0x{dtype[0]:02X}{dtype[1]:02X}" if isinstance(dtype, list) and len(dtype) == 2 else str(dtype)
+            )
+            lines.append(f"{name}  |  Adres {sd[0]}.{sd[1]}  |  Tip {dtype_hex}  |  ID {d.get('id')}")
+
         return {
+            "liste": "\n".join(lines) if lines else "(hiç cihaz yok)",
             "devices": devices,
             "count": len(devices),
         }
 
 
 class TisLastRxAgeSensor(_BaseTisSensor):
-    _attr_name = "Seconds since last packet"
+    _attr_name = "TIS Son Paketten Sonra (sn)"
     _attr_unique_id = "tis_last_rx_age_s"
 
     @property
