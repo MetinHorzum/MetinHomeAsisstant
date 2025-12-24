@@ -36,10 +36,23 @@ def _extract_cstr(data: bytes) -> str:
 
 @dataclass
 class TisDeviceInfo:
-    ip: str
+    """Represents one RS485-side device discovered via the IP gateway.
+
+    Note: UDP responses come from the gateway IP (same src_ip) for many devices,
+    so we must key devices by protocol identifiers, not by source IP.
+    """
+    gateway_ip: str
+    source_device: list[int] = field(default_factory=lambda: [0x00, 0x00])
+    device_type: int = 0
     name: str = ""
     last_seen: float = 0.0
     raw: dict = field(default_factory=dict)
+
+    @property
+    def unique_id(self) -> str:
+        sd0, sd1 = (self.source_device + [0, 0])[:2]
+        return f"{self.gateway_ip}_{sd0:02X}{sd1:02X}_{self.device_type:04X}"
+
 
 
 @dataclass
@@ -147,13 +160,27 @@ class TisUdpClient:
             op_code = parsed.get("op_code")
             src_ip = addr[0]
 
-            if op_code == DISCOVERY_RESPONSE_OPCODE:
-                name = _extract_cstr(parsed.get("additional_data", b""))
-                info = self.state.discovered.get(src_ip) or TisDeviceInfo(ip=src_ip)
-                info.name = name or info.name
-                info.last_seen = time.time()
-                info.raw = parsed
-                self.state.discovered[src_ip] = info
+            if op_code == DISCOVERY_RESPONSE_OPCODE and parsed.get("valid", False):
+    name = _extract_cstr(parsed.get("additional_data", b""))
+    device_type = int(parsed.get("device_type") or 0)
+    source_device = parsed.get("source_device") or [0x00, 0x00]
+
+    info = TisDeviceInfo(
+        gateway_ip=self.host,
+        source_device=source_device,
+        device_type=device_type,
+    )
+    uid = info.unique_id
+    # Merge with existing (keep name if we already had one)
+    existing = self.state.discovered.get(uid)
+    if existing:
+        info.name = name or existing.name
+    else:
+        info.name = name or ""
+    info.last_seen = time.time()
+    info.raw = parsed
+    self.state.discovered[uid] = info
+
             else:
                 # For future: handle telemetry opcodes here.
                 pass
