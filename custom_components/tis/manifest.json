@@ -1,7 +1,7 @@
 {
   "domain": "tis",
   "name": "TIS Home (SmartCloud UDP)",
-  "version": "0.1.6",
+  "version": "0.1.0",
   "documentation": "https://example.invalid",
   "requirements": [],
   "codeowners": [],

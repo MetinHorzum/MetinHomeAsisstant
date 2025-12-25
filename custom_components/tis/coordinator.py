@@ -5,32 +5,73 @@ import logging
 import socket
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Dict, Optional, Set
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.components import persistent_notification
 
-from .const import DOMAIN, DISCOVERY_OPCODE, DISCOVERY_RESPONSE_OPCODE
+from .const import (
+    DOMAIN,
+    DEFAULT_SCAN_TIMEOUT,
+    DISCOVERY_OPCODE,
+    DISCOVERY_RESPONSE_OPCODE,
+)
 from .protocol import build_packet, parse_smartcloud_packet
 
 _LOGGER = logging.getLogger(__name__)
 
 
+def _extract_cstr(data: bytes) -> str:
+    """0-terminated (C string) decode from additional_data."""
+    if not data:
+        return ""
+    nul = data.find(b"\x00")
+    if nul != -1:
+        data = data[:nul]
+    try:
+        return data.decode("utf-8", errors="ignore").strip()
+    except Exception:
+        return ""
+
+
+@dataclass
+class TisDeviceInfo:
+    """Discovery satırı: GW IP + Source Subnet/Device + type + name vb."""
+    unique_id: str  # "{gw_ip}-{sub}-{dev}"
+    gw_ip: str
+    src_sub: int
+    src_dev: int
+
+    name: str = ""
+    device_type: Optional[int] = None
+    last_seen: float = 0.0
+    opcodes_seen: Set[int] = field(default_factory=set)
+    raw: dict = field(default_factory=dict)
+
+    @property
+    def src_str(self) -> str:
+        return f"{self.src_sub}.{self.src_dev}"
+
+    @property
+    def device_type_hex(self) -> str:
+        if self.device_type is None:
+            return ""
+        return f"0x{self.device_type:04X}"
+
+
 @dataclass
 class TisState:
     last_rx_ts: float | None = None
-    discovered: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    discovered: Dict[str, TisDeviceInfo] = field(default_factory=dict)  # key=unique_id
 
 
 class TisUdpClient:
-    """UDP discovery + receive loop for TIS SmartCloud."""
+    """UDP discovery + receive loop for TIS SmartCloud packets."""
 
-    def __init__(self, hass: HomeAssistant, host: str, port: int, broadcast: str):
+    def __init__(self, hass: HomeAssistant, host: str, port: int):
         self.hass = hass
         self.host = host
         self.port = port
-        self.broadcast = broadcast
 
         self._sock: Optional[socket.socket] = None
         self._task: Optional[asyncio.Task] = None
@@ -41,13 +82,14 @@ class TisUdpClient:
             return
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setblocking(False)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.setblocking(False)
 
-        # listen on port 6000 like your sniffer
+        # Listen on the UDP port (6000 by default) for device replies
         sock.bind(("", self.port))
-        self._sock = sock
 
+        self._sock = sock
         self._task = asyncio.create_task(self._recv_loop())
 
     async def async_stop(self) -> None:
@@ -60,38 +102,39 @@ class TisUdpClient:
             finally:
                 self._sock = None
 
-    def _local_ip_for_gateway(self) -> str:
-        """Best-effort: pick the local IP that routes to the gateway."""
+    def _get_local_ip_for_gateway(self) -> str:
+        """Best-effort local IP detection for the LAN."""
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect((self.host, self.port))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
+            return s.getsockname()[0]
         except Exception:
-            return "0.0.0.0"
+            return "192.168.1.100"
+        finally:
+            s.close()
 
-    async def discover(self, timeout: float = 2.0) -> Dict[str, Dict[str, Any]]:
+    async def discover(self, timeout: float = DEFAULT_SCAN_TIMEOUT) -> Dict[str, TisDeviceInfo]:
+        """Broadcast discovery (0x000E) and collect responses (0x000F)."""
         await self.async_start()
         assert self._sock is not None
+        loop = asyncio.get_running_loop()
 
-        source_ip = self._local_ip_for_gateway()
-        # IMPORTANT: build_packet expects *source* IP (your PC was 192.168.1.2 in the sniffer),
-        # not the gateway IP. Using gateway IP causes devices to ignore the request.
+        source_ip = self._get_local_ip_for_gateway()
+
         pkt_list = build_packet(
             operation_code=[(DISCOVERY_OPCODE >> 8) & 0xFF, DISCOVERY_OPCODE & 0xFF],
             ip_address=source_ip,
-            device_id=[0xFF, 0xFF],  # broadcast target device
-            source_device_id=[0x01, 0xFE],  # matches your GUI defaults
-            device_type=[0xFF, 0xFE],
+            device_id=[0xFF, 0xFF],
+            source_device_id=[0x00, 0x00],
             additional_packets=[],
         )
         pkt = bytes(pkt_list)
 
-        loop = asyncio.get_running_loop()
-        await loop.sock_sendto(self._sock, pkt, (self.broadcast, self.port))
+        # Send to broadcast
+        await loop.sock_sendto(self._sock, pkt, ("255.255.255.255", self.port))
 
-        end = time.time() + timeout
+        # Wait for responses to populate state.discovered via recv_loop
+        end = time.time() + float(timeout)
         while time.time() < end:
             await asyncio.sleep(0.05)
 
@@ -106,54 +149,52 @@ class TisUdpClient:
                 data, addr = await loop.sock_recvfrom(self._sock, 4096)
             except asyncio.CancelledError:
                 return
-            except Exception as err:
-                _LOGGER.debug("UDP recv error: %s", err)
-                await asyncio.sleep(0.2)
+            except Exception:
+                await asyncio.sleep(0.1)
                 continue
 
             self.state.last_rx_ts = time.time()
 
             parsed = parse_smartcloud_packet(data)
-            if not parsed or not parsed.get("valid"):
+            if not parsed.get("valid"):
+                continue
+            if not parsed.get("crc_valid", True):
                 continue
 
+            gw_ip = addr[0]
             op_code = parsed.get("op_code")
-            if op_code != DISCOVERY_RESPONSE_OPCODE:
+            src = parsed.get("source_device") or [None, None]
+            src_sub, src_dev = src[0], src[1]
+            dev_type = parsed.get("device_type")
+
+            if src_sub is None or src_dev is None:
                 continue
 
-            src_ip = addr[0]
-            src_dev = parsed.get("source_device") or [0, 0]
-            tgt_dev = parsed.get("target_device") or [0, 0]
-            # Discovery response'lar gateway IP'sinden gelebilir (hepsi aynı src_ip).
-            # Bu yüzden anahtar olarak "source_device" çiftini kullanıyoruz.
-            device_key = f"{src_dev[0]:02X}{src_dev[1]:02X}"
-            info = {
-                "src_ip": src_ip,
-                "source_device": src_dev,
-                "target_device": tgt_dev,
-                "device_type": parsed.get("device_type"),
-                "name": None,
-                "op_code": op_code,
-                "length": parsed.get("length"),
-                "crc_valid": parsed.get("crc_valid"),
-            }
-            add = parsed.get("additional_data") or b""
-            info["additional_hex"] = add.hex(" ")
+            unique_id = f"{gw_ip}-{int(src_sub)}-{int(src_dev)}"
 
-            # Device name is typically a null-terminated string inside the 20-byte payload.
-            # We try UTF-8 first (your example includes Turkish 'ı' = C4 B1), then CP1254.
-            raw_name = add.split(b"\x00", 1)[0]
-            for enc in ("utf-8", "cp1254", "latin-1"):
-                try:
-                    name = raw_name.decode(enc).strip()
-                    if name:
-                        info["name"] = name
-                        info["name_encoding"] = enc
-                        break
-                except Exception:
-                    continue
+            info = self.state.discovered.get(unique_id)
+            if info is None:
+                info = TisDeviceInfo(
+                    unique_id=unique_id,
+                    gw_ip=gw_ip,
+                    src_sub=int(src_sub),
+                    src_dev=int(src_dev),
+                )
 
-            self.state.discovered[device_key] = info
+            info.last_seen = time.time()
+            info.raw = parsed
+            if isinstance(dev_type, int):
+                info.device_type = dev_type
+            if isinstance(op_code, int):
+                info.opcodes_seen.add(op_code)
+
+            # 0x000F -> name in additional_data
+            if op_code == DISCOVERY_RESPONSE_OPCODE:
+                name = _extract_cstr(parsed.get("additional_data", b""))
+                if name:
+                    info.name = name
+
+            self.state.discovered[unique_id] = info
 
 
 class TisCoordinator(DataUpdateCoordinator[TisState]):
@@ -170,28 +211,7 @@ class TisCoordinator(DataUpdateCoordinator[TisState]):
     async def async_start(self) -> None:
         await self.client.async_start()
 
-    async def async_discover(self, show_notification: bool = False) -> Dict[str, Dict[str, Any]]:
-        devices = await self.client.discover()
+    async def async_discover(self) -> Dict[str, TisDeviceInfo]:
+        await self.client.discover()
         self.async_set_updated_data(self.client.state)
-
-        if show_notification:
-            lines = ["**TIS Cihaz Taraması Sonucu**", ""]
-            if not devices:
-                lines.append("Hiç cihaz bulunamadı.")
-            else:
-                for dev_id, info in sorted(devices.items(), key=lambda x: x[0]):
-                    name = info.get("name") or "(isim yok)"
-                    dtype = info.get("device_type")
-                    dtype_hex = f"0x{dtype[0]:02X}{dtype[1]:02X}" if isinstance(dtype, list) and len(dtype) == 2 else str(dtype)
-                    subnet = info.get("source_device", [0, 0])[0]
-                    devno = info.get("source_device", [0, 0])[1]
-                    lines.append(f"- **{name}** — ID: `{dev_id}` (Adres: {subnet}.{devno}) — Type: `{dtype_hex}`")
-
-            persistent_notification.async_create(
-                self.hass,
-                "\n".join(lines),
-                title="TIS Cihaz Listesi",
-                notification_id=f"{DOMAIN}_devices",
-            )
-
-        return devices
+        return dict(self.client.state.discovered)
