@@ -17,6 +17,7 @@ from .const import (
     DISCOVERY_OPCODE,
     DISCOVERY_RESPONSE_OPCODE,
     SIGNAL_TIS_UPDATE,
+    DEVICE_TYPES,
 )
 from .protocol import build_packet, parse_smartcloud_packet
 
@@ -166,7 +167,34 @@ class TisUdpClient:
 
         return dict(self.state.discovered)
 
-    async def send_set_channel(
+    
+    async def send_rcu_types(self, device: "TisDeviceInfo") -> None:
+        """Request RCU channel types (op 0x0005)."""
+        await self._send_simple_opcode(device, 0x0005)
+
+    async def send_rcu_states(self, device: "TisDeviceInfo") -> None:
+        """Request RCU channel states (op 0x2025)."""
+        await self._send_simple_opcode(device, 0x2025)
+
+    async def _send_simple_opcode(self, device: "TisDeviceInfo", op: int) -> None:
+        """Send an opcode with empty additional payload to a device."""
+        await self.async_start()
+        assert self._sock is not None
+        loop = asyncio.get_running_loop()
+
+        source_ip = self._get_local_ip_for_gateway()
+        dev_type = device.device_type if device.device_type is not None else 0xFFFE
+
+        pkt_list = build_packet(
+            operation_code=[(op >> 8) & 0xFF, op & 0xFF],
+            ip_address=source_ip,
+            device_id=[device.src_sub & 0xFF, device.src_dev & 0xFF],
+            source_device_id=[0x00, 0x00],
+            device_type=[(int(dev_type) >> 8) & 0xFF, int(dev_type) & 0xFF],
+            additional_packets=[],
+        )
+        await loop.sock_sendto(self._sock, bytes(pkt_list), (device.gw_ip, self.port))
+async def send_set_channel(
         self,
         device: TisDeviceInfo,
         channel: int,
@@ -274,7 +302,8 @@ class TisUdpClient:
                     info.channel_states = states
 
             self.state.discovered[unique_id] = info
-            dispatcher_send(self.hass, SIGNAL_TIS_UPDATE, unique_id)
+            dispatcher_send(self.hass, SIGNAL_TIS_UPDATE,
+    DEVICE_TYPES, unique_id)
 
 
 class TisCoordinator(DataUpdateCoordinator[TisState]):
@@ -287,9 +316,12 @@ class TisCoordinator(DataUpdateCoordinator[TisState]):
         )
         self.client = client
         self.data = client.state
+        self._poll_task: asyncio.Task | None = None
 
     async def async_start(self) -> None:
         await self.client.async_start()
+        if self._poll_task is None:
+            self._poll_task = self.hass.async_create_task(self._poll_loop())
 
     async def async_discover(self) -> Dict[str, TisDeviceInfo]:
         await self.client.discover()

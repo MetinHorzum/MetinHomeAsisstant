@@ -35,8 +35,8 @@ async def async_setup_entry(
             return []
         entities: List[SwitchEntity] = []
         for ch, ch_type in enumerate(dev.channel_types, start=1):
-            # 2 = output
-            if ch_type == 2:
+            # 1 = output (from tester parse_0005)
+            if ch_type == 1:
                 ent = TisRcuOutputSwitch(coordinator, dev.unique_id, ch)
                 if ent.unique_id not in created:
                     created.add(ent.unique_id)
