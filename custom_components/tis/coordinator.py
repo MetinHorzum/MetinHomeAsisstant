@@ -63,25 +63,27 @@ class TisUdpClient:
         if self._task: self._task.cancel()
         if self._sock: self._sock.close()
 
-    async def async_send_command(self, target_sub: int, target_dev: int, opcode: int, payload: list):
+    async def async_send_command(self, target_sub: int, target_dev: int, opcode: int, payload: list, broadcast=False):
         """Cihaza UDP paketi gönderir."""
         if not self._sock: return
         
-        # Source ID olarak 1.254 (Standart PC/Server ID) kullanıyoruz
         pkt_list = build_packet(
             operation_code=[(opcode >> 8) & 0xFF, opcode & 0xFF],
-            ip_address="0.0.0.0", # build_packet içinde otomatik çözülebilir veya dummy kalabilir
-            source_device_id=[1, 254],
+            ip_address="0.0.0.0", 
+            source_device_id=[0x01, 0xFE], # TIS_UDP_Tester'daki gibi
             device_id=[target_sub, target_dev],
             additional_packets=payload
         )
+        
         loop = asyncio.get_running_loop()
-        await loop.sock_sendto(self._sock, bytes(pkt_list), (self.host, self.port))
+        target_ip = "255.255.255.255" if broadcast else self.host
+        await loop.sock_sendto(self._sock, bytes(pkt_list), (target_ip, self.port))
 
-    async def discover(self, timeout: float = DEFAULT_SCAN_TIMEOUT):
+    async def discover(self, timeout: float = 2.0):
+        """Discovery paketini (0x000E) broadcast olarak gönderir."""
         await self.async_start()
-        # Discovery paketi gönderimi (0x000E)
-        await self.async_send_command(0xFF, 0xFF, DISCOVERY_OPCODE, [])
+        # Target Sub/Dev: 0xFFFF (Broadcast)
+        await self.async_send_command(0xFF, 0xFF, 0x000E, [], broadcast=True)
         await asyncio.sleep(timeout)
         return self.state.discovered
 
