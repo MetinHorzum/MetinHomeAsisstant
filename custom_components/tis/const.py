@@ -181,5 +181,6 @@ DEVICE_TYPES = {0: 'Control Panel (Generic)',
  33040: 'TIS-TM-120',
  65534: 'Light Dimmer (Generic)'}
 
+
 # Dispatcher signal fired on every received/parsed packet
 SIGNAL_TIS_UPDATE = f"{DOMAIN}_update"

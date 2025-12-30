@@ -122,12 +122,7 @@ def build_packet(
         Tam paket (IP + SMARTCLOUD + veri + CRC) byte listesi
     """
     # IP adresini byte'lara çevir
-    if isinstance(ip_address, (list, tuple)):
-        ip_bytes = [int(x) & 0xFF for x in ip_address]
-    else:
-        ip_bytes = [int(part) for part in ip_address.split(".")]
-    if len(ip_bytes) != 4:
-        raise ValueError(f"Invalid ip_address: {ip_address!r}")
+    ip_bytes = [int(part) for part in ip_address] if isinstance(ip_address, (list, tuple)) else [int(part) for part in str(ip_address).split(".")]
     
     # Header'ı byte'lara çevir
     header_bytes = [ord(char) for char in header]

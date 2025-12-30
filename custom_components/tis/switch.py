@@ -29,13 +29,12 @@ async def async_setup_entry(
     created: set[str] = set()
 
     def build_for_device(dev: TisDeviceInfo) -> List[SwitchEntity]:
-        if not _is_rcu(dev):
-            return []
-        if not dev.channel_types:
+        # Output channels only. Types must have been received (0x0005)
+        if not _is_rcu(dev) or not getattr(dev, "channel_types", None):
             return []
         entities: List[SwitchEntity] = []
         for ch, ch_type in enumerate(dev.channel_types, start=1):
-            # Per tester: 0x01 = Output, 0x02 = Input
+            # Tester mapping: 0x01 = Output, 0x02 = Input
             if ch_type == 0x01:
                 ent = TisRcuOutputSwitch(coordinator, dev.unique_id, ch)
                 if ent.unique_id not in created:
@@ -50,7 +49,6 @@ async def async_setup_entry(
     if initial:
         async_add_entities(initial)
 
-    # dynamic add when new packets arrive and types become available
     def _on_update(unique_id: str) -> None:
         dev = coordinator.client.state.discovered.get(unique_id)
         if not dev:
@@ -85,8 +83,9 @@ class TisRcuOutputSwitch(SwitchEntity):
         dev = self._device()
         if not dev:
             return None
-        if len(dev.channel_states) >= self._channel:
-            return bool(dev.channel_states[self._channel - 1])
+        states = getattr(dev, "channel_states", [])
+        if len(states) >= self._channel:
+            return bool(states[self._channel - 1])
         return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
@@ -95,22 +94,11 @@ class TisRcuOutputSwitch(SwitchEntity):
             return
         await self._coordinator.client.send_set_channel(dev, self._channel, 100, ramp_seconds=0)
 
-        # optimistic update
-        if len(dev.channel_states) < self._channel:
-            dev.channel_states.extend([0] * (self._channel - len(dev.channel_states)))
-        dev.channel_states[self._channel - 1] = 1
-        self.async_write_ha_state()
-
     async def async_turn_off(self, **kwargs: Any) -> None:
         dev = self._device()
         if not dev:
             return
         await self._coordinator.client.send_set_channel(dev, self._channel, 0, ramp_seconds=0)
-
-        if len(dev.channel_states) < self._channel:
-            dev.channel_states.extend([0] * (self._channel - len(dev.channel_states)))
-        dev.channel_states[self._channel - 1] = 0
-        self.async_write_ha_state()
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
