@@ -38,7 +38,7 @@ def _extract_cstr(data: bytes) -> str:
 
 
 def _parse_0005(add: bytes) -> tuple[int, list[int]]:
-    \"\"\"RCU channel types (0x0005): [qty][kind][types...]\"\"\"
+    """RCU channel types (0x0005): [qty][kind][types...]"""
     if not add:
         return 0, []
     qty = add[0]
@@ -49,7 +49,7 @@ def _parse_0005(add: bytes) -> tuple[int, list[int]]:
 
 
 def _parse_2025(add: bytes) -> list[int]:
-    \"\"\"RCU channel states list (0x2025).\"\"\"
+    """RCU channel states list (0x2025)."""
     return list(add) if add else []
 
 
