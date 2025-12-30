@@ -96,25 +96,41 @@ def bytes2hex(data, rtype=[]):
         return hex_string
 
 
-# protocol.py
 def build_packet(
     operation_code: list,
     ip_address: str,
+    destination_mac: str = "AA:AA:AA:AA:AA:AA:AA:AA",
+    source_mac: str = "CB:CB:CB:CB:CB:CB:CB:CB",
     device_id: list = [],
     source_device_id: list = [0x01, 0xFE],
     device_type: list = [0xFF, 0xFE],
     additional_packets: list = [],
     header="SMARTCLOUD",
 ):
-    """TIS SMARTCLOUD paketi oluştur (TIS_UDP_Tester.py ile uyumlu)"""
+    """TIS SMARTCLOUD paketi oluştur
+    
+    Args:
+        operation_code: Op code [high_byte, low_byte]
+        ip_address: Kaynak IP adresi "192.168.1.100"
+        device_id: Hedef cihaz ID [high_byte, low_byte]
+        source_device_id: Kaynak cihaz ID [high_byte, low_byte]
+        device_type: Device Type [high_byte, low_byte] (default: 0xFFFE)
+        additional_packets: Ek data bytes listesi
+        header: Paket başlığı (varsayılan: SMARTCLOUD)
+        
+    Returns:
+        Tam paket (IP + SMARTCLOUD + veri + CRC) byte listesi
+    """
     # IP adresini byte'lara çevir
     ip_bytes = [int(part) for part in ip_address.split(".")]
+    
+    # Header'ı byte'lara çevir
     header_bytes = [ord(char) for char in header]
     
-    # Uzunluk: source_id(2) + dev_type(2) + opcode(2) + target_id(2) + additional + separator(2) + length_byte(1)
-    # Ancak TIS standardında length genelde 11 + additional_data uzunluğudur.
+    # Length hesapla (source_device_id + device_type + operation_code + device_id + additional)
     length = 11 + len(additional_packets)
     
+    # Paketi oluştur
     packet = (
         ip_bytes
         + header_bytes
@@ -127,10 +143,11 @@ def build_packet(
         + additional_packets
     )
     
-    # Pakete CRC ekle
-    from .protocol import packCRC
+    # CRC ekle
     packet = packCRC(packet)
+    
     return packet
+
 
 def decode_mac(mac: list):
     """MAC adresini byte listesinden string'e çevir"""

@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN
 from .coordinator import TisCoordinator, TisUdpClient
 
-PLATFORMS: list[str] = ["sensor", "light"]
+PLATFORMS: list[str] = ["sensor"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
