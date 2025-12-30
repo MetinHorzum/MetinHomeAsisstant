@@ -15,6 +15,7 @@ from .const import (
     DEFAULT_SCAN_TIMEOUT,
     DISCOVERY_OPCODE,
     DISCOVERY_RESPONSE_OPCODE,
+    DEVICE_TYPES,
 )
 from .protocol import build_packet, parse_smartcloud_packet
 
@@ -22,7 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _extract_cstr(data: bytes) -> str:
-    """0-terminated (C string) decode from additional_data."""
+    """0-terminated (C string) decode."""
     if not data:
         return ""
     nul = data.find(b"\x00")
@@ -36,7 +37,8 @@ def _extract_cstr(data: bytes) -> str:
 
 @dataclass
 class TisDeviceInfo:
-    """Discovery satırı: GW IP + Source Subnet/Device + type + name vb."""
+    """Discovery list item (TIS_UDP_Tester list view equivalent)."""
+
     unique_id: str  # "{gw_ip}-{sub}-{dev}"
     gw_ip: str
     src_sub: int
@@ -46,7 +48,6 @@ class TisDeviceInfo:
     device_type: Optional[int] = None
     last_seen: float = 0.0
     opcodes_seen: Set[int] = field(default_factory=set)
-    raw: dict = field(default_factory=dict)
 
     @property
     def src_str(self) -> str:
@@ -57,6 +58,12 @@ class TisDeviceInfo:
         if self.device_type is None:
             return ""
         return f"0x{self.device_type:04X}"
+
+    @property
+    def device_model(self) -> str:
+        if self.device_type is None:
+            return ""
+        return DEVICE_TYPES.get(self.device_type, self.device_type_hex)
 
 
 @dataclass
@@ -86,7 +93,7 @@ class TisUdpClient:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.setblocking(False)
 
-        # Listen on the UDP port (6000 by default) for device replies
+        # Listen on the same UDP port as devices send replies to (6000 by default)
         sock.bind(("", self.port))
 
         self._sock = sock
@@ -167,6 +174,7 @@ class TisUdpClient:
             src_sub, src_dev = src[0], src[1]
             dev_type = parsed.get("device_type")
 
+            # discovery row key: GW IP + SRC subnet/dev
             if src_sub is None or src_dev is None:
                 continue
 
@@ -182,7 +190,6 @@ class TisUdpClient:
                 )
 
             info.last_seen = time.time()
-            info.raw = parsed
             if isinstance(dev_type, int):
                 info.device_type = dev_type
             if isinstance(op_code, int):
@@ -203,7 +210,7 @@ class TisCoordinator(DataUpdateCoordinator[TisState]):
             hass=hass,
             logger=_LOGGER,
             name=f"{DOMAIN}_coordinator",
-            update_interval=None,
+            update_interval=None,  # manual refresh only
         )
         self.client = client
         self.data = client.state
