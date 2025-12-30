@@ -7,14 +7,6 @@ DEFAULT_SCAN_TIMEOUT = 2.0
 DISCOVERY_OPCODE = 0x000E
 DISCOVERY_RESPONSE_OPCODE = 0x000F
 
-CH_STATUS_QUERY = 0x0033
-CH_STATUS_RESP = 0x0034
-SINGLE_CH_CTRL = 0x0031
-SINGLE_CH_CTRL_RESP = 0x0032
-
-RCU_TYPES_OPCODE = 0x0005
-RCU_STATES_OPCODE = 0x2025
-
 # Device type -> model name mapping (from your TIS_UDP_Tester)
 DEVICE_TYPES = {0: 'Control Panel (Generic)',
  1: 'Single Channel Lighting',
@@ -188,3 +180,6 @@ DEVICE_TYPES = {0: 'Control Panel (Generic)',
  32968: 'TIS-SIR-8G',
  33040: 'TIS-TM-120',
  65534: 'Light Dimmer (Generic)'}
+
+# Dispatcher signal fired on every received/parsed packet
+SIGNAL_TIS_UPDATE = f"{DOMAIN}_update"
