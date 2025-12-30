@@ -16,7 +16,7 @@ def _is_rcu(device: TisDeviceInfo) -> bool:
     if device.device_type is None:
         return False
     model = DEVICE_TYPES.get(device.device_type, "")
-    return str(model).startswith("RCU")
+    return model.startswith("RCU")
 
 
 async def async_setup_entry(
@@ -35,8 +35,8 @@ async def async_setup_entry(
             return []
         entities: List[SwitchEntity] = []
         for ch, ch_type in enumerate(dev.channel_types, start=1):
-            # 1 = output (from tester parse_0005)
-            if ch_type == 1:
+            # Per tester: 0x01 = Output, 0x02 = Input
+            if ch_type == 0x01:
                 ent = TisRcuOutputSwitch(coordinator, dev.unique_id, ch)
                 if ent.unique_id not in created:
                     created.add(ent.unique_id)
