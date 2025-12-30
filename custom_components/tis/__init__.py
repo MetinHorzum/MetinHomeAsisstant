@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN
 from .coordinator import TisCoordinator, TisUdpClient
 
-PLATFORMS: list[str] = ["sensor", "switch", "binary_sensor"]
+PLATFORMS: list[str] = ["sensor", "light"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -22,7 +22,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    await coordinator.async_request_refresh()
+    # First discovery to populate devices quickly (non-blocking)
+    hass.async_create_task(coordinator.async_discover())
+
     return True
 
 

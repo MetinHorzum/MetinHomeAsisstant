@@ -1,10 +1,26 @@
 # TIS Home Assistant Custom Integration (SmartCloud UDP)
 
-- Discovers all TIS SmartCloud devices via UDP 6000 broadcast (0x000E/0x000F)
-- Always exposes `sensor.tis_discovery_devices` with the full discovered list
-- For RCU devices (device_type 0x802B): creates
-  - 24 output switches (CH1..CH24) with control via opcode 0x0031 (value 0/100)
-  - 20 digital inputs (DI1..DI20) via opcodes 0xD218/0xD219
+Bu paket, TIS IP gateway'in (ör. 192.168.1.200) **UDP 6000** üzerinden yaptığı **0x000E Discovery** yayınını gönderir ve
+**0x000F Discovery Response** paketlerini dinleyerek ağdaki TIS cihazlarını yakalar.
 
-Notes:
-- If Home Assistant runs in Docker, use host networking so UDP broadcast works.
+## Kurulum
+
+1. Zip içindeki `custom_components/tis` klasörünü Home Assistant config klasörünüze kopyalayın:
+
+```
+/config/custom_components/tis
+```
+
+2. Home Assistant'ı yeniden başlatın.
+3. HA UI: **Ayarlar → Cihazlar ve Hizmetler → Entegrasyon Ekle → "TIS Home (SmartCloud UDP)"** (adı "TIS Home" olarak görünebilir)
+4. Host: `192.168.1.200`, Port: `6000`
+
+## Şu an ne yapıyor?
+
+- UDP 6000 dinler.
+- Kurulumda otomatik 1 kez discovery yapar.
+- `sensor.tis_discovered_devices` ve `sensor.tis_seconds_since_last_packet` şeklinde iki debug sensörü ekler.
+
+## Sonraki adım
+
+Discovery sonrası gelen cihazların `op_code`'larına göre gerçek sensör entity'leri (sıcaklık/nem/PIR vs.) eklenebilir.
