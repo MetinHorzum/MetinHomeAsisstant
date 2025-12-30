@@ -22,9 +22,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # First discovery to populate devices quickly (non-blocking)
-    hass.async_create_task(coordinator.async_discover())
-
+    await coordinator.async_request_refresh()
     return True
 
 

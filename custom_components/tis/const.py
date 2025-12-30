@@ -7,20 +7,6 @@ DEFAULT_SCAN_TIMEOUT = 2.0
 DISCOVERY_OPCODE = 0x000E
 DISCOVERY_RESPONSE_OPCODE = 0x000F
 
-# ---- RCU (RCU-24R20Z etc.) ----
-RCU_DEVICE_TYPE = 0x802B
-
-# Output channel types / names / states observed in capture
-RCU_TYPES_OPCODE = 0x0005          # request+response
-RCU_STATES_QUERY_OPCODE = 0x2024   # request
-RCU_STATES_RESPONSE_OPCODE = 0x2025
-RCU_CH_NAME_QUERY_OPCODE = 0xF00E
-RCU_CH_NAME_RESPONSE_OPCODE = 0xF00F
-
-# Digital input read (observed in RCU24.txt)
-RCU_DI_QUERY_OPCODE = 0xD218
-RCU_DI_RESPONSE_OPCODE = 0xD219
-
 # Device type mapping (ported from TIS_UDP_Tester.py)
 DEVICE_TYPES = {
     0x0000: "UNKNOWN",
@@ -35,5 +21,22 @@ DEVICE_TYPES = {
     0x0008: "BUTTON",
     0x0009: "ENERGY",
     0x000A: "GATEWAY",
+    # Observed in your captures:
     0x802B: "RCU",
 }
+
+# RCU opcodes (observed)
+RCU_CH_TYPES_REQ = 0x0005
+RCU_CH_TYPES_RESP = 0x0005
+RCU_CH_NAMES_REQ = 0xF00E
+RCU_CH_NAMES_RESP = 0xF00F
+RCU_STATE_REQ = 0x2024
+RCU_STATE_RESP = 0x2025
+RCU_DI_REQ = 0xD218
+RCU_DI_RESP = 0xD219
+
+# Generic channel control (from TIS_UDP_Tester)
+CH_SET_REQ = 0x0031
+CH_SET_RESP = 0x0032
+CH_GET_REQ = 0x0033
+CH_GET_RESP = 0x0034

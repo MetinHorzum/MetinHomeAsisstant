@@ -9,34 +9,27 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .coordinator import TisDeviceInfo
+from .coordinator import TisDeviceInfo, TisCoordinator
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    coordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: TisCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([TisDiscoveryListSensor(coordinator)], True)
 
 
 class TisDiscoveryListSensor(SensorEntity):
-    """Tek sensör: ağda taranan cihazların listesini attribute olarak taşır.
-
-    - state: keşfedilen cihaz sayısı
-    - attributes.devices: Discovery/Devices sekmesi benzeri satır listesi
-    """
-
     _attr_has_entity_name = True
     _attr_name = "Discovery devices"
     _attr_unique_id = "tis_discovery_devices"
     _attr_icon = "mdi:radar"
 
-    def __init__(self, coordinator):
+    def __init__(self, coordinator: TisCoordinator):
         self.coordinator = coordinator
 
     async def async_update(self) -> None:
-        # Manuel refresh -> discovery paketini gönder
-        await self.coordinator.async_discover()
+        await self.coordinator.async_request_refresh()
 
     @property
     def native_value(self) -> int:
@@ -60,7 +53,6 @@ class TisDiscoveryListSensor(SensorEntity):
         out: List[Dict[str, Any]] = []
         now = time.time()
 
-        # stable ordering for UI: by gw_ip then src
         def _key(item):
             d = item[1]
             return (d.gw_ip, d.src_sub, d.src_dev)

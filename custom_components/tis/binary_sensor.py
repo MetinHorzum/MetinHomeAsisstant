@@ -1,132 +1,76 @@
 from __future__ import annotations
 
-import logging
-from typing import Set
+from typing import Any, List
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, RCU_DEVICE_TYPE
-from .coordinator import TisCoordinator, TisDeviceInfo
-
-_LOGGER = logging.getLogger(__name__)
+from .const import DOMAIN, RCU_DI_RESP
+from .coordinator import TisCoordinator
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator: TisCoordinator = hass.data[DOMAIN][entry.entry_id]
+    entities: list[BinarySensorEntity] = []
 
-    added: Set[str] = set()
+    for dev in coordinator.data.discovered.values():
+        if dev.device_type == 0x802B:
+            label = dev.name or f"RCU {dev.src_str}"
+            for di in range(1, 21):
+                entities.append(TisRcuDigitalInput(coordinator, dev.src_sub, dev.src_dev, di, label))
 
-    def _add_for_current_state() -> None:
-        new_entities: list[BinarySensorEntity] = []
-        for dev in coordinator.data.discovered.values():
-            if dev.device_type != RCU_DEVICE_TYPE:
-                continue
-
-            # Digital inputs (bitfield decoded from 0xD219)
-            for idx in range(1, len(dev.rcu_di_bits) + 1):
-                uid = f"{dev.unique_id}-rcu-di-{idx}"
-                if uid in added:
-                    continue
-                added.add(uid)
-                new_entities.append(TisRcuDigitalInput(coordinator, dev.unique_id, idx))
-
-            # If the device ever reports channel types with input channels, expose them too.
-            if dev.rcu_types:
-                qty = len(dev.rcu_types)
-                for ch in range(1, qty + 1):
-                    if dev.rcu_types[ch - 1] != 0x02:
-                        continue
-                    uid = f"{dev.unique_id}-rcu-in-{ch}"
-                    if uid in added:
-                        continue
-                    added.add(uid)
-                    new_entities.append(TisRcuInputChannel(coordinator, dev.unique_id, ch))
-
-        if new_entities:
-            async_add_entities(new_entities)
-
-    _add_for_current_state()
-    coordinator.async_add_listener(_add_for_current_state)
+    if entities:
+        async_add_entities(entities, True)
 
 
-class _BaseRcuBinary(CoordinatorEntity[TisCoordinator], BinarySensorEntity):
-    _attr_has_entity_name = True
+def _bits_from_bytes(data: bytes) -> List[int]:
+    bits: List[int] = []
+    for b in data:
+        for i in range(8):
+            bits.append((b >> i) & 1)  # LSB-first
+    return bits
 
-    def __init__(self, coordinator: TisCoordinator, device_uid: str) -> None:
-        super().__init__(coordinator)
-        self._device_uid = device_uid
+
+class TisRcuDigitalInput(BinarySensorEntity):
+    _attr_icon = "mdi:electric-switch"
+
+    def __init__(self, coordinator: TisCoordinator, sub: int, dev: int, di: int, label: str):
+        self.coordinator = coordinator
+        self.sub = sub
+        self.dev = dev
+        self.di = di
+        self._attr_has_entity_name = True
+        self._attr_name = f"{label} DI{di}"
+        self._attr_unique_id = f"tis_rcu_{sub}_{dev}_di_{di}"
 
     @property
-    def _dev(self) -> TisDeviceInfo | None:
-        return self.coordinator.data.discovered.get(self._device_uid)
-
-    @property
-    def device_info(self):
-        dev = self._dev
-        if not dev:
-            return None
+    def device_info(self) -> dict[str, Any]:
         return {
-            "identifiers": {(DOMAIN, dev.unique_id)},
-            "name": dev.name or f"RCU {dev.src_str}",
+            "identifiers": {(DOMAIN, f"rcu_{self.sub}_{self.dev}")},
+            "name": f"TIS RCU {self.sub}.{self.dev}",
             "manufacturer": "TIS",
-            "model": dev.device_model,
+            "model": "RCU",
         }
 
-
-class TisRcuDigitalInput(_BaseRcuBinary):
-    """RCU 'mechanical switch' digital input as binary_sensor."""
-
-    _attr_icon = "mdi:gesture-tap"
-
-    def __init__(self, coordinator: TisCoordinator, device_uid: str, di_index: int) -> None:
-        super().__init__(coordinator, device_uid)
-        self._di_index = di_index
-        self._attr_unique_id = f"{device_uid}-rcu-di-{di_index}"
-
-    @property
-    def name(self) -> str:
-        return f"DI {self._di_index}"
+    async def async_update(self) -> None:
+        await self.coordinator.async_request_refresh()
 
     @property
     def is_on(self) -> bool | None:
-        dev = self._dev
-        if not dev:
+        payload = self.coordinator.data.payloads.get((self.sub, self.dev, RCU_DI_RESP))
+        if not payload:
             return None
-        if self._di_index - 1 >= len(dev.rcu_di_bits):
+
+        data = payload
+        if len(payload) >= 3 and payload[0] == 0x0A:
+            data = payload[2:]
+
+        bits = _bits_from_bytes(data)
+        idx = self.di - 1
+        if idx >= len(bits):
             return None
-        return bool(dev.rcu_di_bits[self._di_index - 1])
-
-
-class TisRcuInputChannel(_BaseRcuBinary):
-    """If RCU reports per-channel INPUT types (0x02), expose them here."""
-
-    _attr_icon = "mdi:circle-slice-8"
-
-    def __init__(self, coordinator: TisCoordinator, device_uid: str, ch: int) -> None:
-        super().__init__(coordinator, device_uid)
-        self._ch = ch
-        self._attr_unique_id = f"{device_uid}-rcu-in-{ch}"
-
-    @property
-    def name(self) -> str:
-        dev = self._dev
-        if not dev:
-            return f"IN {self._ch}"
-        return dev.rcu_names.get(self._ch, f"IN {self._ch}")
-
-    @property
-    def is_on(self) -> bool | None:
-        dev = self._dev
-        if not dev:
-            return None
-        if self._ch - 1 >= len(dev.rcu_states):
-            return None
-        return bool(dev.rcu_states[self._ch - 1])
+        return bits[idx] == 1
