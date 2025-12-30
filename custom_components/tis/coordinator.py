@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.dispatcher import dispatcher_send
 
 from .const import (
+    DEVICE_TYPES,
     DOMAIN,
     DEFAULT_SCAN_TIMEOUT,
     DISCOVERY_OPCODE,
@@ -34,6 +35,31 @@ def _extract_cstr(data: bytes) -> str:
         return data.decode("utf-8", errors="ignore").strip()
     except Exception:
         return ""
+
+
+def _is_rcu(device_type: int | None) -> bool:
+    """Return True if device_type maps to an RCU model."""
+    if device_type is None:
+        return False
+    model = DEVICE_TYPES.get(device_type, "")
+    return model.startswith("RCU")
+
+
+def _parse_0005(add: bytes) -> tuple[int, list[int]]:
+    """RCU channel types (0x0005): [qty][kind][types...]"""
+    if not add:
+        return 0, []
+    qty = add[0]
+    if qty <= 0:
+        return 0, []
+    # add[1] is "kind" in your tester; types start at add[2]
+    types = list(add[2 : 2 + qty]) if len(add) >= 2 + qty else list(add[2:])
+    return qty, types
+
+
+def _parse_2025(add: bytes) -> list[int]:
+    """RCU channel states list (0x2025)."""
+    return list(add) if add else []
 
 
 @dataclass
@@ -82,6 +108,7 @@ class TisUdpClient:
 
         self._sock: Optional[socket.socket] = None
         self._task: Optional[asyncio.Task] = None
+        self._poll_task: Optional[asyncio.Task] = None
         self.state = TisState()
 
     async def async_start(self) -> None:
@@ -98,16 +125,101 @@ class TisUdpClient:
 
         self._sock = sock
         self._task = asyncio.create_task(self._recv_loop())
+        self._poll_task = asyncio.create_task(self._rcu_poll_loop())
 
     async def async_stop(self) -> None:
         if self._task:
             self._task.cancel()
             self._task = None
+        if self._poll_task:
+            self._poll_task.cancel()
+            self._poll_task = None
         if self._sock:
             try:
                 self._sock.close()
             finally:
                 self._sock = None
+
+    async def send_set_channel(
+        self,
+        device: TisDeviceInfo,
+        channel: int,
+        value: int,
+        ramp_seconds: int = 0,
+    ) -> None:
+        """Set a single channel value on a device (op 0x0031).
+
+        channel: 1-based
+        value: 0-100 (relay için 0/100)
+        """
+        await self.async_start()
+        assert self._sock is not None
+        loop = asyncio.get_running_loop()
+
+        source_ip = self._get_local_ip_for_gateway()
+        op = 0x0031
+
+        payload = [
+            int(channel) & 0xFF,
+            int(value) & 0xFF,
+            (int(ramp_seconds) >> 8) & 0xFF,
+            int(ramp_seconds) & 0xFF,
+        ]
+
+        dev_type = device.device_type if device.device_type is not None else 0xFFFE
+
+        pkt_list = build_packet(
+            operation_code=[(op >> 8) & 0xFF, op & 0xFF],
+            ip_address=source_ip,
+            device_id=[device.src_sub & 0xFF, device.src_dev & 0xFF],
+            source_device_id=[0x00, 0x00],
+            device_type=[(int(dev_type) >> 8) & 0xFF, int(dev_type) & 0xFF],
+            additional_packets=payload,
+        )
+
+        await loop.sock_sendto(self._sock, bytes(pkt_list), (device.gw_ip, self.port))
+
+    async def _send_read_opcode(self, device: TisDeviceInfo, opcode: int) -> None:
+        """Send a read/query opcode with empty additional payload."""
+        await self.async_start()
+        assert self._sock is not None
+        loop = asyncio.get_running_loop()
+
+        source_ip = self._get_local_ip_for_gateway()
+        dev_type = device.device_type if device.device_type is not None else 0xFFFE
+
+        pkt_list = build_packet(
+            operation_code=[(opcode >> 8) & 0xFF, opcode & 0xFF],
+            ip_address=source_ip,
+            device_id=[device.src_sub & 0xFF, device.src_dev & 0xFF],
+            source_device_id=[0x00, 0x00],
+            device_type=[(int(dev_type) >> 8) & 0xFF, int(dev_type) & 0xFF],
+            additional_packets=[],
+        )
+        await loop.sock_sendto(self._sock, bytes(pkt_list), (device.gw_ip, self.port))
+
+    async def _rcu_poll_loop(self) -> None:
+        """Periodically query RCU devices for types (0x0005) and states (0x2025)."""
+        # Keep it simple & conservative: poll every 10s
+        while True:
+            try:
+                await asyncio.sleep(10)
+                # Snapshot devices to avoid mutation issues
+                devices = list(self.state.discovered.values())
+                for dev in devices:
+                    if not _is_rcu(dev.device_type):
+                        continue
+                    # request types once until we have them
+                    if not dev.channel_types:
+                        await self._send_read_opcode(dev, 0x0005)
+                        await asyncio.sleep(0)  # yield
+                    # request states always
+                    await self._send_read_opcode(dev, 0x2025)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                # never crash the integration due to polling
+                continue
 
     def _get_local_ip_for_gateway(self) -> str:
         """Best-effort local IP detection for the LAN."""
@@ -201,7 +313,22 @@ class TisUdpClient:
                 if name:
                     info.name = name
 
+            # 0x0005 -> RCU channel types
+            if op_code == 0x0005:
+                qty, types = _parse_0005(parsed.get("additional_data", b""))
+                if qty:
+                    info.channel_count = qty
+                if types:
+                    info.channel_types = types
+
+            # 0x2025 -> RCU channel states
+            if op_code == 0x2025:
+                states = _parse_2025(parsed.get("additional_data", b""))
+                if states:
+                    info.channel_states = states
+
             self.state.discovered[unique_id] = info
+            dispatcher_send(self.hass, SIGNAL_TIS_UPDATE, unique_id)
 
 
 class TisCoordinator(DataUpdateCoordinator[TisState]):

@@ -19,6 +19,14 @@ def _is_rcu(device: TisDeviceInfo) -> bool:
     return model.startswith("RCU")
 
 
+def _rcu_layout(dev: TisDeviceInfo) -> tuple[int, int]:
+    """Return (outputs, inputs) for known RCU models."""
+    model = DEVICE_TYPES.get(dev.device_type or 0, "")
+    if model.startswith("RCU24"):
+        return (24, 20)
+    return (0, 0)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -29,13 +37,31 @@ async def async_setup_entry(
     created: set[str] = set()
 
     def build_for_device(dev: TisDeviceInfo) -> List[SwitchEntity]:
-        # Output channels only. Types must have been received (0x0005)
-        if not _is_rcu(dev) or not getattr(dev, "channel_types", None):
+        """Build controllable RCU output switches.
+
+        Preferred: use channel_types (0x0005).
+        Fallback: for known models (RCU24...), create a fixed set (24 OUT).
+        """
+        if not _is_rcu(dev):
             return []
+
         entities: List[SwitchEntity] = []
-        for ch, ch_type in enumerate(dev.channel_types, start=1):
-            # Tester mapping: 0x01 = Output, 0x02 = Input
-            if ch_type == 0x01:
+
+        # Preferred path: types known
+        if getattr(dev, "channel_types", None):
+            for ch, ch_type in enumerate(dev.channel_types, start=1):
+                # Tester mapping: 0x01 = Output, 0x02 = Input
+                if ch_type == 0x01:
+                    ent = TisRcuOutputSwitch(coordinator, dev.unique_id, ch)
+                    if ent.unique_id not in created:
+                        created.add(ent.unique_id)
+                        entities.append(ent)
+            return entities
+
+        # Fallback for known models
+        outs, _ins = _rcu_layout(dev)
+        if outs:
+            for ch in range(1, outs + 1):
                 ent = TisRcuOutputSwitch(coordinator, dev.unique_id, ch)
                 if ent.unique_id not in created:
                     created.add(ent.unique_id)
