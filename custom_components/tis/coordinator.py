@@ -81,6 +81,9 @@ class TisDeviceInfo:
     channel_types: list[int] = field(default_factory=list)  # 0=unused,1=output,2=input
     channel_states: list[int] = field(default_factory=list)  # 0/1
 
+    # Internal bookkeeping to avoid spamming type queries
+    rcu_types_requested: bool = False
+
     @property
     def src_str(self) -> str:
         return f"{self.src_sub}.{self.src_dev}"
@@ -199,7 +202,12 @@ class TisUdpClient:
         await loop.sock_sendto(self._sock, bytes(pkt_list), (device.gw_ip, self.port))
 
     async def _rcu_poll_loop(self) -> None:
-        """Periodically query RCU devices for types (0x0005) and states (0x2025)."""
+        """Periodically query devices for types (0x0005) and states (0x2025).
+
+        We used to only poll devices whose device_type mapped to an RCU model, but
+        some firmwares report unknown types. To keep things robust, we poll all
+        discovered devices (they can safely ignore unknown opcodes).
+        """
         # Keep it simple & conservative: poll every 10s
         while True:
             try:
@@ -207,13 +215,13 @@ class TisUdpClient:
                 # Snapshot devices to avoid mutation issues
                 devices = list(self.state.discovered.values())
                 for dev in devices:
-                    if not _is_rcu(dev.device_type):
-                        continue
                     # request types once until we have them
-                    if not dev.channel_types:
+                    if (not dev.channel_types) and (not getattr(dev, "rcu_types_requested", False)):
                         await self._send_read_opcode(dev, 0x0005)
+                        dev.rcu_types_requested = True
                         await asyncio.sleep(0)  # yield
-                    # request states always
+
+                    # request states always (RCU will answer, others will ignore)
                     await self._send_read_opcode(dev, 0x2025)
             except asyncio.CancelledError:
                 return

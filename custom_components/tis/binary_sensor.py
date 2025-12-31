@@ -12,10 +12,39 @@ from .const import DEVICE_TYPES, DOMAIN, SIGNAL_TIS_UPDATE
 from .coordinator import TisCoordinator, TisDeviceInfo
 
 
+def _is_rcu(dev: TisDeviceInfo) -> bool:
+    """Best-effort detection of an RCU device."""
+    dt = dev.device_type
+    if dt is not None:
+        model = DEVICE_TYPES.get(dt, "")
+        if model.startswith("RCU"):
+            return True
+
+    name = (dev.name or "").upper()
+    if "RCU" in name:
+        return True
+
+    seen = set(getattr(dev, "opcodes_seen", []) or [])
+    if {0x2025, 0x0005, 0x0034, 0x0033, 0x0031, 0x0032}.intersection(seen):
+        return True
+
+    states = getattr(dev, "channel_states", [])
+    if isinstance(states, list) and len(states) >= 20:
+        return True
+
+    return False
+
+
 def _rcu_layout(dev: TisDeviceInfo) -> Tuple[int, int]:
     model = DEVICE_TYPES.get(dev.device_type or 0, "")
     if model.startswith("RCU24"):
         return 24, 20
+
+    # If we already saw a long state vector, assume the common 24/20 layout.
+    states = getattr(dev, "channel_states", [])
+    if isinstance(states, list) and len(states) >= 44:
+        return 24, 20
+
     return 0, 0
 
 
@@ -24,8 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     created: set[str] = set()
 
     def build(dev: TisDeviceInfo) -> List[BinarySensorEntity]:
-        model = DEVICE_TYPES.get(dev.device_type or 0, "")
-        if not model.startswith("RCU"):
+        if not _is_rcu(dev):
             return []
 
         ents: List[BinarySensorEntity] = []

@@ -13,10 +13,32 @@ from .coordinator import TisCoordinator, TisDeviceInfo
 
 
 def _is_rcu(device: TisDeviceInfo) -> bool:
-    if device.device_type is None:
-        return False
-    model = DEVICE_TYPES.get(device.device_type, "")
-    return model.startswith("RCU")
+    """Best-effort detection of an RCU device.
+
+    Not all firmwares report a device_type that maps to DEVICE_TYPES.
+    In that case we fall back to observed opcodes / payload characteristics.
+    """
+    dt = device.device_type
+    if dt is not None:
+        model = DEVICE_TYPES.get(dt, "")
+        if model.startswith("RCU"):
+            return True
+
+    name = (device.name or "").upper()
+    if "RCU" in name:
+        return True
+
+    # Heuristic: RCU devices tend to emit these opcodes (states/types)
+    seen = set(getattr(device, "opcodes_seen", []) or [])
+    if {0x2025, 0x0005, 0x0034, 0x0033, 0x0031, 0x0032}.intersection(seen):
+        return True
+
+    # Another heuristic: if we have a long channel state vector, it's very likely an RCU
+    states = getattr(device, "channel_states", [])
+    if isinstance(states, list) and len(states) >= 20:
+        return True
+
+    return False
 
 
 def _rcu_layout(dev: TisDeviceInfo) -> tuple[int, int]:
@@ -24,6 +46,12 @@ def _rcu_layout(dev: TisDeviceInfo) -> tuple[int, int]:
     model = DEVICE_TYPES.get(dev.device_type or 0, "")
     if model.startswith("RCU24"):
         return (24, 20)
+
+    # If we already saw a long state vector, assume the common 24/20 layout.
+    states = getattr(dev, "channel_states", [])
+    if isinstance(states, list) and len(states) >= 44:
+        return (24, 20)
+
     return (0, 0)
 
 
